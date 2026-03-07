@@ -171,15 +171,30 @@ const snippetSchema = new mongoose.Schema({
 const Snippet = mongoose.model('Snippet', snippetSchema);
 
 // ─── Task ────────────────────────────────────────────────
+const taskSubmissionSchema = new mongoose.Schema({
+  user:        { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  fileName:    { type: String, required: true },
+  fileUrl:     { type: String, required: true },   // base64 data URL stored in DB
+  fileType:    { type: String },                   // mime type
+  fileSize:    { type: Number },                   // bytes
+  note:        { type: String, default: '' },
+  status:      { type: String, enum: ['pending','approved','rejected'], default: 'pending' },
+  adminNote:   { type: String, default: '' },
+  reviewedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reviewedAt:  { type: Date },
+  submittedAt: { type: Date, default: Date.now }
+});
+
 const taskSchema = new mongoose.Schema({
   title:       { type: String, required: true },
   description: { type: String },
   assignedTo:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   assignedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  status:      { type: String, enum: ['todo','inprogress','done'], default: 'todo' },
+  status:      { type: String, enum: ['todo','inprogress','pending_review','done','rejected'], default: 'todo' },
   priority:    { type: String, enum: ['low','medium','high','urgent'], default: 'medium' },
   dueDate:     { type: Date },
   xpReward:    { type: Number, default: 50 },
+  submissions: [taskSubmissionSchema],
   createdAt:   { type: Date, default: Date.now }
 });
 const Task = mongoose.model('Task', taskSchema);

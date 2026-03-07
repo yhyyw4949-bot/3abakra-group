@@ -536,74 +536,298 @@ async function createBlog() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  TASKS PAGE
+//  TASKS PAGE — with file submission & admin review
 // ═══════════════════════════════════════════════════════
 async function renderTasks() {
   const content = document.getElementById('main-content');
   let tasks = [];
   try { tasks = await API.get('/api/features/tasks'); } catch {}
 
-  const priorityColors = { low:'var(--text-muted)', medium:'var(--accent-warn)', high:'var(--accent-3)', urgent:'#ff0000' };
-  const statusCols = { todo: [], inprogress: [], done: [] };
-  tasks.forEach(t => { if (statusCols[t.status]) statusCols[t.status].push(t); });
+  const isAdmin = State.user?.role === 'admin';
+  const currentUserId = State.user?._id || State.user?.id;
+
+  const priorityColors = { low:'var(--text-muted)', medium:'var(--accent-warn)', high:'var(--accent-3)', urgent:'#ff4444' };
+  const statusLabel = { todo:'📋 To Do', inprogress:'⚙️ In Progress', pending_review:'🔍 Pending Review', done:'✅ Done', rejected:'❌ Rejected' };
+  const statusColor = { todo:'var(--text-muted)', inprogress:'var(--accent-warn)', pending_review:'#a78bfa', done:'var(--accent)', rejected:'#ff4444' };
+
+  // Group for kanban (admin sees all columns, user sees their tasks)
+  const cols = isAdmin
+    ? ['todo','inprogress','pending_review','done','rejected']
+    : ['todo','inprogress','pending_review','done','rejected'];
+
+  const grouped = {};
+  cols.forEach(c => grouped[c] = []);
+  tasks.forEach(t => { if (grouped[t.status] !== undefined) grouped[t.status].push(t); });
+
+  // Count pending reviews for admin badge
+  const pendingCount = grouped['pending_review']?.length || 0;
 
   content.innerHTML = `
   <div class="page-header fade-in">
-    <div><div class="page-title">Task Manager</div><div class="page-subtitle">${State.user?.role==='admin'?'Manage and assign tasks to team members':'Your assigned tasks'}</div></div>
-    ${State.user?.role === 'admin' ? `<button class="btn-primary" onclick="openNewTask()">+ New Task</button>` : ''}
+    <div>
+      <div class="page-title">Task Manager</div>
+      <div class="page-subtitle">${isAdmin ? `Manage tasks · ${pendingCount > 0 ? `<span style="color:#a78bfa">🔍 ${pendingCount} pending review</span>` : 'all caught up ✓'}` : 'Your assigned tasks'}</div>
+    </div>
+    ${isAdmin ? `<button class="btn-primary" onclick="openNewTask()">+ New Task</button>` : ''}
   </div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" class="fade-in">
-    ${['todo','inprogress','done'].map(status => {
-      const labels = { todo:'📋 To Do', inprogress:'⚙️ In Progress', done:'✅ Done' };
-      const colors = { todo:'var(--text-muted)', inprogress:'var(--accent-warn)', done:'var(--accent)' };
-      return `
-      <div>
-        <div style="font-size:0.8rem;font-weight:700;color:${colors[status]};margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid ${colors[status]}">${labels[status]} (${statusCols[status].length})</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          ${statusCols[status].length === 0 ? `<div style="text-align:center;color:var(--text-muted);font-size:0.78rem;padding:20px">Empty</div>` :
-            statusCols[status].map(t => `
-            <div class="card" style="padding:14px;border-left:3px solid ${priorityColors[t.priority]}">
-              <div style="font-weight:600;font-size:0.85rem;margin-bottom:4px">${t.title}</div>
-              ${t.description ? `<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px">${t.description.slice(0,80)}...</div>` : ''}
-              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:8px">
-                ${t.dueDate ? `📅 ${formatDate(t.dueDate)} · ` : ''}⚡ ${t.xpReward} XP
-              </div>
-              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
-                ${(t.assignedTo||[]).map(u=>`<span class="tag">${u.username||'?'}</span>`).join('')}
-              </div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap">
-                ${status !== 'todo'      ? `<button class="btn-secondary" style="font-size:0.65rem;padding:3px 7px" onclick="updateTaskStatus('${t._id}','todo')">← Todo</button>` : ''}
-                ${status !== 'inprogress'? `<button class="btn-secondary" style="font-size:0.65rem;padding:3px 7px" onclick="updateTaskStatus('${t._id}','inprogress')">⚙️ Start</button>` : ''}
-                ${status !== 'done'      ? `<button class="btn-primary"   style="font-size:0.65rem;padding:3px 7px" onclick="updateTaskStatus('${t._id}','done')">✓ Done</button>` : ''}
-                ${State.user?.role==='admin' ? `<button class="btn-danger" style="font-size:0.65rem;padding:3px 7px" onclick="deleteTask('${t._id}')">✕</button>` : ''}
-              </div>
-            </div>`).join('')}
-        </div>
-      </div>`;
-    }).join('')}
+
+  <div style="display:grid;grid-template-columns:repeat(${isAdmin?5:4},1fr);gap:12px;overflow-x:auto" class="fade-in">
+    ${cols.map(status => `
+    <div style="min-width:220px">
+      <div style="font-size:0.75rem;font-weight:700;color:${statusColor[status]};margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid ${statusColor[status]}">
+        ${statusLabel[status]} <span style="font-weight:400;opacity:0.7">(${grouped[status].length})</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${grouped[status].length === 0
+          ? `<div style="text-align:center;color:var(--text-muted);font-size:0.75rem;padding:20px 0">Empty</div>`
+          : grouped[status].map(t => renderTaskCard(t, status, currentUserId, isAdmin, priorityColors)).join('')}
+      </div>
+    </div>`).join('')}
   </div>`;
 }
 
-async function updateTaskStatus(id, status) {
+function renderTaskCard(t, status, currentUserId, isAdmin, priorityColors) {
+  const mySubmission = t.submissions?.find(s => (s.user?._id || s.user)?.toString() === currentUserId);
+  const allSubmissions = t.submissions || [];
+
+  return `
+  <div class="card" style="padding:12px;border-left:3px solid ${priorityColors[t.priority]};font-size:0.82rem">
+    <div style="font-weight:700;margin-bottom:4px">${t.title}</div>
+    ${t.description ? `<div style="color:var(--text-secondary);font-size:0.75rem;margin-bottom:6px">${t.description.slice(0,80)}${t.description.length>80?'...':''}</div>` : ''}
+
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+      ${(t.assignedTo||[]).map(u=>`<span class="tag" style="font-size:0.65rem">${u.username||'?'}</span>`).join('')}
+    </div>
+
+    <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:8px">
+      ${t.dueDate ? `📅 ${formatDate(t.dueDate)} · ` : ''}
+      ⚡ ${t.xpReward} XP ·
+      <span style="color:${priorityColors[t.priority]}">${t.priority}</span>
+    </div>
+
+    <!-- User actions -->
+    ${!isAdmin ? `
+    <div style="display:flex;flex-direction:column;gap:4px">
+      ${status === 'todo' ? `<button class="btn-secondary" style="font-size:0.7rem;padding:5px" onclick="moveTask('${t._id}','inprogress')">⚙️ Start Task</button>` : ''}
+      ${status === 'inprogress' ? `<button class="btn-primary" style="font-size:0.7rem;padding:5px" onclick="openSubmitWork('${t._id}','${t.title}')">📎 Submit Work</button>` : ''}
+      ${status === 'pending_review' ? `
+        <div style="background:rgba(167,139,250,0.1);border:1px solid #a78bfa;border-radius:6px;padding:6px;font-size:0.7rem;color:#a78bfa">
+          🔍 Awaiting admin review
+          ${mySubmission ? `<div style="color:var(--text-muted);margin-top:2px">📎 ${mySubmission.fileName}</div>` : ''}
+        </div>
+        <button class="btn-secondary" style="font-size:0.7rem;padding:4px" onclick="openSubmitWork('${t._id}','${t.title}')">↻ Resubmit</button>
+      ` : ''}
+      ${status === 'rejected' ? `
+        <div style="background:rgba(255,68,68,0.1);border:1px solid #ff4444;border-radius:6px;padding:6px;font-size:0.7rem;color:#ff4444;margin-bottom:4px">
+          ❌ Rejected${mySubmission?.adminNote ? `<br><span style="color:var(--text-secondary)">"${mySubmission.adminNote}"</span>` : ''}
+        </div>
+        <button class="btn-primary" style="font-size:0.7rem;padding:5px" onclick="openSubmitWork('${t._id}','${t.title}')">📎 Resubmit Work</button>
+      ` : ''}
+      ${status === 'done' ? `<div style="color:var(--accent);font-size:0.75rem;text-align:center">✅ Approved! +${t.xpReward} XP</div>` : ''}
+    </div>` : ''}
+
+    <!-- Admin view -->
+    ${isAdmin ? `
+    <div style="display:flex;flex-direction:column;gap:4px">
+      ${status === 'pending_review' ? `
+        <div style="font-size:0.72rem;font-weight:600;color:#a78bfa;margin-bottom:4px">🔍 ${allSubmissions.filter(s=>s.status==='pending').length} submission(s) to review</div>
+        ${allSubmissions.filter(s=>s.status==='pending').map(s => `
+        <div style="background:var(--bg-elevated);border-radius:6px;padding:8px;margin-bottom:4px">
+          <div style="font-size:0.72rem;font-weight:600;color:var(--accent)">${s.user?.username||'?'}</div>
+          <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:6px">📎 ${s.fileName}</div>
+          ${s.note ? `<div style="font-size:0.7rem;color:var(--text-secondary);margin-bottom:4px">"${s.note}"</div>` : ''}
+          <div style="display:flex;gap:4px">
+            <button class="btn-secondary" style="font-size:0.65rem;padding:3px 6px;flex:1" onclick="previewFile('${s._id}','${t._id}')">👁 View</button>
+            <button class="btn-primary" style="font-size:0.65rem;padding:3px 6px;flex:1;background:var(--accent)" onclick="openReview('${t._id}','${s._id}','${s.user?.username||'?'}','approve')">✅ Approve</button>
+            <button class="btn-danger" style="font-size:0.65rem;padding:3px 6px;flex:1" onclick="openReview('${t._id}','${s._id}','${s.user?.username||'?'}','reject')">❌ Reject</button>
+          </div>
+        </div>`).join('')}
+      ` : ''}
+      ${status === 'done' ? `<div style="color:var(--accent);font-size:0.72rem">✅ Completed & approved</div>` : ''}
+      ${status !== 'pending_review' && status !== 'done' ? `
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn-danger" style="font-size:0.65rem;padding:3px 6px" onclick="deleteTask('${t._id}')">Delete</button>
+        </div>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+// ── Move task column ──────────────────────────────────────
+async function moveTask(id, status) {
+  try { await API.put(`/api/features/tasks/${id}/status`, { status }); renderTasks(); }
+  catch (err) { Toast.error(err.message); }
+}
+
+// ── Open submit work modal ────────────────────────────────
+function openSubmitWork(taskId, taskTitle) {
+  Modal.open(`
+    <div style="margin-bottom:14px">
+      <div style="font-size:0.8rem;color:var(--text-muted)">Task: <strong style="color:var(--text-primary)">${taskTitle}</strong></div>
+    </div>
+    <div class="form-group">
+      <label>Upload Your Work</label>
+      <div id="file-drop-zone" style="border:2px dashed var(--border);border-radius:10px;padding:30px;text-align:center;cursor:pointer;transition:all 0.2s" onclick="document.getElementById('task-file-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondrop="handleFileDrop(event)">
+        <div id="file-drop-text">
+          <div style="font-size:2rem;margin-bottom:8px">📎</div>
+          <div style="font-weight:600;margin-bottom:4px">Click or drag to upload</div>
+          <div style="font-size:0.72rem;color:var(--text-muted)">PDF, PowerPoint, Images, Word · Max 10MB</div>
+        </div>
+      </div>
+      <input type="file" id="task-file-input" style="display:none" accept=".pdf,.ppt,.pptx,.doc,.docx,.png,.jpg,.jpeg,.gif,.zip" onchange="handleFileSelect(this)">
+    </div>
+    <div class="form-group">
+      <label>Note (optional)</label>
+      <textarea id="task-submit-note" placeholder="Describe your work or add any notes..."></textarea>
+    </div>
+    <button class="btn-primary btn-full" id="submit-work-btn" onclick="submitWork('${taskId}')" disabled style="opacity:0.5">📤 Submit for Review</button>
+  `, 'Submit Your Work');
+}
+
+// ── File drag & drop ─────────────────────────────────────
+function handleFileDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  const maxSize = 10 * 1024 * 1024;
+  if (file.size > maxSize) { Toast.error('File too large! Max 10MB'); return; }
+
+  const dropZone = document.getElementById('file-drop-zone');
+  const dropText = document.getElementById('file-drop-text');
+  const submitBtn = document.getElementById('submit-work-btn');
+
+  dropText.innerHTML = `
+    <div style="font-size:1.5rem;margin-bottom:6px">${getFileIcon(file.type)}</div>
+    <div style="font-weight:600;font-size:0.85rem;color:var(--accent)">${file.name}</div>
+    <div style="font-size:0.72rem;color:var(--text-muted)">${(file.size/1024).toFixed(1)} KB · Click to change</div>`;
+  dropZone.style.borderColor = 'var(--accent)';
+  dropZone.style.background = 'rgba(0,212,170,0.05)';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    window._taskFileData = { name: file.name, url: e.target.result, type: file.type, size: file.size };
+    submitBtn.disabled = false;
+    submitBtn.style.opacity = '1';
+  };
+  reader.readAsDataURL(file);
+}
+
+function getFileIcon(mimeType) {
+  if (mimeType.includes('pdf')) return '📄';
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📊';
+  if (mimeType.includes('word') || mimeType.includes('document')) return '📝';
+  if (mimeType.includes('image')) return '🖼️';
+  if (mimeType.includes('zip')) return '🗜️';
+  return '📎';
+}
+
+// ── Submit work to server ─────────────────────────────────
+async function submitWork(taskId) {
+  const fileData = window._taskFileData;
+  if (!fileData) { Toast.error('Please select a file first'); return; }
+  const note = document.getElementById('task-submit-note')?.value || '';
+  const btn = document.getElementById('submit-work-btn');
+  btn.textContent = '⏳ Uploading...';
+  btn.disabled = true;
   try {
-    const data = await API.put(`/api/features/tasks/${id}/status`, { status });
-    if (data.xpGained) { showXPPopup(data.xpGained); Toast.success(`Task done! +${data.xpGained} XP`); State.user = await API.get('/api/auth/me'); updateSidebarUser(); }
+    await API.post(`/api/features/tasks/${taskId}/submit`, {
+      fileName: fileData.name,
+      fileUrl:  fileData.url,
+      fileType: fileData.type,
+      fileSize: fileData.size,
+      note
+    });
+    window._taskFileData = null;
+    Toast.success('Work submitted! Admin will review it soon 🎉');
+    Modal.close();
     renderTasks();
+  } catch (err) {
+    Toast.error(err.message);
+    btn.textContent = '📤 Submit for Review';
+    btn.disabled = false;
+  }
+}
+
+// ── Preview submitted file ────────────────────────────────
+async function previewFile(subId, taskId) {
+  let tasks = [];
+  try { tasks = await API.get('/api/features/tasks'); } catch {}
+  const task = tasks.find(t => t._id === taskId);
+  const sub = task?.submissions?.find(s => s._id === subId);
+  if (!sub) { Toast.error('File not found'); return; }
+
+  const isImage = sub.fileType?.includes('image');
+  const isPDF   = sub.fileType?.includes('pdf');
+
+  Modal.open(`
+    <div style="margin-bottom:12px">
+      <div style="font-size:0.8rem;color:var(--text-muted)">Submitted by <strong style="color:var(--accent)">${sub.user?.username||'?'}</strong></div>
+      <div style="font-size:0.75rem;color:var(--text-muted)">📎 ${sub.fileName} · ${sub.fileSize ? (sub.fileSize/1024).toFixed(1)+' KB' : ''}</div>
+      ${sub.note ? `<div style="margin-top:8px;font-size:0.82rem;color:var(--text-secondary);background:var(--bg-elevated);padding:8px;border-radius:6px">"${sub.note}"</div>` : ''}
+    </div>
+    ${isImage ? `<img src="${sub.fileUrl}" style="width:100%;border-radius:8px;max-height:400px;object-fit:contain">` :
+      isPDF    ? `<iframe src="${sub.fileUrl}" style="width:100%;height:400px;border:none;border-radius:8px"></iframe>` :
+      `<div style="text-align:center;padding:30px">
+        <div style="font-size:3rem;margin-bottom:12px">${getFileIcon(sub.fileType||'')}</div>
+        <div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:14px">Preview not available for this file type</div>
+        <a href="${sub.fileUrl}" download="${sub.fileName}" class="btn-primary" style="display:inline-block">⬇ Download File</a>
+      </div>`}
+    <div style="margin-top:14px;display:flex;justify-content:center">
+      <a href="${sub.fileUrl}" download="${sub.fileName}" class="btn-secondary" style="font-size:0.8rem">⬇ Download</a>
+    </div>
+  `, sub.fileName);
+}
+
+// ── Admin review modal ────────────────────────────────────
+function openReview(taskId, subId, username, action) {
+  const isApprove = action === 'approve';
+  Modal.open(`
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:2.5rem;margin-bottom:8px">${isApprove ? '✅' : '❌'}</div>
+      <div style="font-weight:700;font-size:1rem">${isApprove ? 'Approve' : 'Reject'} submission by <span style="color:var(--accent)">${username}</span>?</div>
+    </div>
+    ${!isApprove ? `
+    <div class="form-group">
+      <label>Reason for rejection (optional)</label>
+      <textarea id="review-note" placeholder="e.g. Missing requirements, please redo section 3..."></textarea>
+    </div>` : ''}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn-secondary" style="flex:1" onclick="Modal.close()">Cancel</button>
+      <button class="${isApprove ? 'btn-primary' : 'btn-danger'}" style="flex:1" onclick="submitReview('${taskId}','${subId}','${action}')">
+        ${isApprove ? '✅ Approve & Award XP' : '❌ Reject'}
+      </button>
+    </div>
+  `, isApprove ? 'Approve Submission' : 'Reject Submission');
+}
+
+async function submitReview(taskId, subId, verdict) {
+  const adminNote = document.getElementById('review-note')?.value || '';
+  try {
+    await API.put(`/api/features/tasks/${taskId}/submissions/${subId}/review`, { verdict, adminNote });
+    Toast.success(verdict === 'approved' ? '✅ Approved! XP awarded!' : '❌ Submission rejected');
+    Modal.close();
+    renderTasks();
+    // Refresh user XP if admin approved
+    if (verdict === 'approved') { State.user = await API.get('/api/auth/me'); updateSidebarUser(); }
   } catch (err) { Toast.error(err.message); }
 }
 
-async function deleteTask(id) {
-  if (!confirm('Delete this task?')) return;
-  try { await API.delete(`/api/features/tasks/${id}`); renderTasks(); } catch (err) { Toast.error(err.message); }
-}
-
+// ── Create task modal ────────────────────────────────────
 async function openNewTask() {
   let users = [];
   try { users = await API.get('/api/users'); } catch {}
   Modal.open(`
     <div class="form-group"><label>Title</label><input type="text" id="task-title" placeholder="Task title"></div>
     <div class="form-group"><label>Description</label><textarea id="task-desc" placeholder="Task details..."></textarea></div>
-    <div class="form-group"><label>Assign To (hold Ctrl for multiple)</label>
+    <div class="form-group">
+      <label>Assign To (hold Ctrl/Cmd for multiple)</label>
       <select id="task-users" multiple style="height:120px">
         ${users.map(u=>`<option value="${u._id}">${u.username}</option>`).join('')}
       </select>
@@ -621,16 +845,26 @@ async function createTask() {
   const select = document.getElementById('task-users');
   const assignedTo = Array.from(select.selectedOptions).map(o => o.value);
   const body = {
-    title:      document.getElementById('task-title').value,
-    description:document.getElementById('task-desc').value,
+    title:       document.getElementById('task-title').value,
+    description: document.getElementById('task-desc').value,
     assignedTo,
-    priority:   document.getElementById('task-priority').value,
-    dueDate:    document.getElementById('task-due').value || undefined,
-    xpReward:   Number(document.getElementById('task-xp').value),
+    priority:    document.getElementById('task-priority').value,
+    dueDate:     document.getElementById('task-due').value || undefined,
+    xpReward:    Number(document.getElementById('task-xp').value),
   };
   if (!body.title) return Toast.error('Title required');
   try { await API.post('/api/features/tasks', body); Toast.success('Task created!'); Modal.close(); renderTasks(); }
   catch (err) { Toast.error(err.message); }
+}
+
+async function deleteTask(id) {
+  if (!confirm('Delete this task?')) return;
+  try { await API.delete(`/api/features/tasks/${id}`); renderTasks(); }
+  catch (err) { Toast.error(err.message); }
+}
+
+async function updateTaskStatus(id, status) {
+  try { await moveTask(id, status); } catch (err) { Toast.error(err.message); }
 }
 
 // ═══════════════════════════════════════════════════════

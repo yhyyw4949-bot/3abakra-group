@@ -534,6 +534,7 @@ router.delete('/snippets/:id', requireAuth, async (req, res) => {
 // ═══════════════════════════════════════════════
 //  TASKS (Admin assigns to users)
 // ═══════════════════════════════════════════════
+// ── GET all tasks ─────────────────────────────────────────
 router.get('/tasks', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
@@ -541,18 +542,23 @@ router.get('/tasks', requireAuth, async (req, res) => {
     if (user.role === 'admin') {
       tasks = await Task.find()
         .populate('assignedTo', 'username avatar')
-        .populate('assignedBy', 'username')
+        .populate('assignedBy', 'username avatar')
+        .populate('submissions.user', 'username avatar')
+        .populate('submissions.reviewedBy', 'username')
         .sort({ createdAt: -1 });
     } else {
       tasks = await Task.find({ assignedTo: req.session.userId })
         .populate('assignedTo', 'username avatar')
-        .populate('assignedBy', 'username')
+        .populate('assignedBy', 'username avatar')
+        .populate('submissions.user', 'username avatar')
+        .populate('submissions.reviewedBy', 'username')
         .sort({ createdAt: -1 });
     }
     res.json(tasks);
   } catch (err) { res.status(500).json({ error: 'Failed to fetch tasks' }); }
 });
 
+// ── CREATE task (admin only) ──────────────────────────────
 router.post('/tasks', requireAdmin, async (req, res) => {
   try {
     const { title, description, assignedTo, priority, dueDate, xpReward } = req.body;
@@ -563,33 +569,107 @@ router.post('/tasks', requireAdmin, async (req, res) => {
       assignedBy: req.session.userId,
       priority, dueDate, xpReward: xpReward || 50
     });
-    // Notify assigned users
     for (const userId of (assignedTo || [])) {
-      await createNotification(userId, 'task', `📋 New Task: ${title}`, description, '#tasks');
+      await createNotification(userId, 'task', `📋 New Task: ${title}`, description || '', '#tasks');
     }
     res.json({ success: true, task });
   } catch (err) { res.status(500).json({ error: 'Failed to create task' }); }
 });
 
+// ── SUBMIT work (user uploads file as base64) ────────────
+router.post('/tasks/:id/submit', requireAuth, async (req, res) => {
+  try {
+    const { fileName, fileUrl, fileType, fileSize, note } = req.body;
+    if (!fileName || !fileUrl) return res.status(400).json({ error: 'File required' });
+    if (fileSize > 10 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 10MB)' });
+
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    const userId = req.session.userId;
+    const isAssigned = task.assignedTo.some(id => id.toString() === userId);
+    if (!isAssigned) return res.status(403).json({ error: 'Not assigned to this task' });
+
+    // Remove old submission from this user if exists
+    task.submissions = task.submissions.filter(s => s.user.toString() !== userId);
+
+    task.submissions.push({ user: userId, fileName, fileUrl, fileType, fileSize, note });
+    task.status = 'pending_review';
+    await task.save();
+
+    // Notify admin(s)
+    const admins = await User.find({ role: 'admin' }, '_id');
+    const submitter = await User.findById(userId);
+    for (const admin of admins) {
+      await createNotification(admin._id, 'task',
+        `📎 Submission: ${task.title}`,
+        `${submitter.username} submitted work for review`,
+        '#tasks'
+      );
+    }
+    res.json({ success: true, message: 'Work submitted for review!' });
+  } catch (err) { res.status(500).json({ error: 'Failed to submit work' }); }
+});
+
+// ── ADMIN: approve or reject a submission ────────────────
+router.put('/tasks/:taskId/submissions/:subId/review', requireAdmin, async (req, res) => {
+  try {
+    const { verdict, adminNote } = req.body; // verdict: 'approved' | 'rejected'
+    if (!['approved','rejected'].includes(verdict))
+      return res.status(400).json({ error: 'Invalid verdict' });
+
+    const task = await Task.findById(req.params.taskId);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    const sub = task.submissions.id(req.params.subId);
+    if (!sub) return res.status(404).json({ error: 'Submission not found' });
+
+    sub.status    = verdict;
+    sub.adminNote = adminNote || '';
+    sub.reviewedBy = req.session.userId;
+    sub.reviewedAt = new Date();
+
+    if (verdict === 'approved') {
+      task.status = 'done';
+      // Award XP to user
+      const user = await User.findById(sub.user);
+      if (user) {
+        await user.addXP(task.xpReward || 50);
+        await createNotification(sub.user, 'xp',
+          `✅ Task Approved: ${task.title}`,
+          `Great work! +${task.xpReward} XP earned`,
+          '#tasks'
+        );
+      }
+    } else {
+      task.status = 'inprogress';
+      await createNotification(sub.user, 'task',
+        `❌ Submission Rejected: ${task.title}`,
+        adminNote || 'Please review and resubmit.',
+        '#tasks'
+      );
+    }
+
+    await task.save();
+    res.json({ success: true, verdict });
+  } catch (err) { res.status(500).json({ error: 'Failed to review submission' }); }
+});
+
+// ── UPDATE task status (move kanban column) ──────────────
 router.put('/tasks/:id/status', requireAuth, async (req, res) => {
   try {
     const { status } = req.body;
+    const allowed = ['todo','inprogress'];
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Use submit endpoint to complete' });
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     task.status = status;
     await task.save();
-    // Award XP on completion
-    if (status === 'done') {
-      const user = await User.findById(req.session.userId);
-      await user.addXP(task.xpReward || 50);
-      await createNotification(req.session.userId, 'xp', `✅ Task Completed!`, `+${task.xpReward} XP earned`);
-      res.json({ success: true, xpGained: task.xpReward });
-    } else {
-      res.json({ success: true });
-    }
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Failed to update task' }); }
 });
 
+// ── DELETE task ──────────────────────────────────────────
 router.delete('/tasks/:id', requireAdmin, async (req, res) => {
   try {
     await Task.findByIdAndDelete(req.params.id);
