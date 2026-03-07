@@ -207,21 +207,15 @@ const followSchema = new mongoose.Schema({
 });
 const Follow = mongoose.model('Follow', followSchema);
 
-module.exports = {
-  Announcement, Event, LearningPath, Poll, Blog,
-  DM, Notification, Mission, UserMission, Team,
-  ShopItem, Snippet, Task, Follow,
-  VideoLesson, UploadedFile
-};
-
+// ─── Video Lesson ─────────────────────────────────────────
 const videoLessonSchema = new mongoose.Schema({
   title:       { type: String, required: true },
   description: { type: String, default: '' },
   category:    { type: String, default: 'General' },
-  fileData:    { type: String, required: true },   // base64
+  fileData:    { type: String, required: true },
   fileName:    { type: String, required: true },
   fileSize:    { type: Number, default: 0 },
-  thumbnail:   { type: String, default: '' },      // base64 thumbnail
+  thumbnail:   { type: String, default: '' },
   duration:    { type: String, default: '' },
   tags:        [{ type: String }],
   author:      { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -237,11 +231,11 @@ const videoLessonSchema = new mongoose.Schema({
 videoLessonSchema.index({ category: 1, createdAt: -1 });
 const VideoLesson = mongoose.model('VideoLesson', videoLessonSchema);
 
-// ─── Uploaded File (generic admin uploads) ───────────────
+// ─── Uploaded File ────────────────────────────────────────
 const uploadedFileSchema = new mongoose.Schema({
   title:     { type: String, required: true },
-  section:   { type: String, required: true }, // 'announcements','resources','challenges','projects','blog'
-  fileData:  { type: String, required: true }, // base64
+  section:   { type: String, required: true },
+  fileData:  { type: String, required: true },
   fileName:  { type: String, required: true },
   fileType:  { type: String, default: '' },
   fileSize:  { type: Number, default: 0 },
@@ -252,3 +246,9 @@ const uploadedFileSchema = new mongoose.Schema({
 uploadedFileSchema.index({ section: 1, createdAt: -1 });
 const UploadedFile = mongoose.model('UploadedFile', uploadedFileSchema);
 
+module.exports = {
+  Announcement, Event, LearningPath, Poll, Blog,
+  DM, Notification, Mission, UserMission, Team,
+  ShopItem, Snippet, Task, Follow,
+  VideoLesson, UploadedFile
+};
