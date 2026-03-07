@@ -788,6 +788,7 @@ async function previewFile(subId, taskId) {
 // ── Admin review modal ────────────────────────────────────
 function openReview(taskId, subId, username, action) {
   const isApprove = action === 'approve';
+  const verdict   = isApprove ? 'approved' : 'rejected';
   Modal.open(`
     <div style="text-align:center;margin-bottom:16px">
       <div style="font-size:2.5rem;margin-bottom:8px">${isApprove ? '✅' : '❌'}</div>
@@ -800,7 +801,7 @@ function openReview(taskId, subId, username, action) {
     </div>` : ''}
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn-secondary" style="flex:1" onclick="Modal.close()">Cancel</button>
-      <button class="${isApprove ? 'btn-primary' : 'btn-danger'}" style="flex:1" onclick="submitReview('${taskId}','${subId}','${action}')">
+      <button class="${isApprove ? 'btn-primary' : 'btn-danger'}" style="flex:1" onclick="submitReview('${taskId}','${subId}','${verdict}')">
         ${isApprove ? '✅ Approve & Award XP' : '❌ Reject'}
       </button>
     </div>
@@ -814,7 +815,6 @@ async function submitReview(taskId, subId, verdict) {
     Toast.success(verdict === 'approved' ? '✅ Approved! XP awarded!' : '❌ Submission rejected');
     Modal.close();
     renderTasks();
-    // Refresh user XP if admin approved
     if (verdict === 'approved') { State.user = await API.get('/api/auth/me'); updateSidebarUser(); }
   } catch (err) { Toast.error(err.message); }
 }
