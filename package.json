@@ -1,6 +1,6 @@
 {
   "name": "it-team-platform",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Professional IT Team Developer Platform",
   "main": "server.js",
   "scripts": {

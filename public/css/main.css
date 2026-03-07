@@ -1209,3 +1209,32 @@ body {
   .challenges-grid, .projects-grid { grid-template-columns: 1fr; }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════
+   V2 ADDITIONS
+════════════════════════════════════════════════ */
+.nav-section-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  padding: 10px 12px 4px;
+  margin-top: 4px;
+}
+.sidebar-nav { gap: 1px; }
+
+/* Task kanban */
+@media (max-width: 700px) {
+  .kanban-grid { grid-template-columns: 1fr !important; }
+}
+
+/* DM layout */
+@media (max-width: 700px) {
+  .dm-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Blog content */
+.blog-content { line-height: 1.9; font-size: 0.88rem; color: var(--text-secondary); }
+.blog-content h1,.blog-content h2,.blog-content h3 { color: var(--text-primary); margin: 16px 0 8px; font-family: var(--font-display); }
+.blog-content code { background: var(--bg-elevated); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); }
+.blog-content pre { background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; }

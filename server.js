@@ -1,4 +1,4 @@
-// server.js - Main Express + Socket.io server
+// server.js - Main Express + Socket.io server (v2 with all new features)
 require('dotenv').config();
 const express    = require('express');
 const http       = require('http');
@@ -24,7 +24,7 @@ const sessionMiddleware = session({
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/it-team-platform'
   }),
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } // 7 days
+  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
 });
 
 // ─── Middleware ──────────────────────────────────────────────────
@@ -41,19 +41,19 @@ app.use('/api/challenges', require('./routes/challenges'));
 app.use('/api/resources',  require('./routes/resources'));
 app.use('/api/users',      require('./routes/users'));
 app.use('/api/chat',       require('./routes/chat'));
+app.use('/api/features',   require('./routes/features')); // ← NEW
 
 // ─── Serve SPA ───────────────────────────────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ─── Socket.io - Share session with socket ────────────────────────
+// ─── Socket.io ────────────────────────────────────────────────
 const wrap = middleware => (socket, next) => middleware(socket.request, {}, next);
 io.use(wrap(sessionMiddleware));
 
-// Track online users
-const onlineUsers = new Map(); // socketId -> { userId, username, avatar, level, room }
-const User    = require('./models/User');
+const onlineUsers = new Map();
+const User        = require('./models/User');
 const { Message } = require('./models/models');
 
 io.on('connection', async (socket) => {
@@ -64,100 +64,48 @@ io.on('connection', async (socket) => {
   try {
     currentUser = await User.findById(userId).select('username avatar level role');
     if (!currentUser) { socket.disconnect(); return; }
-    // Mark online
     await User.findByIdAndUpdate(userId, { isOnline: true });
   } catch (e) { socket.disconnect(); return; }
 
-  const userInfo = {
-    userId, socketId: socket.id,
-    username: currentUser.username,
-    avatar:   currentUser.avatar,
-    level:    currentUser.level,
-    role:     currentUser.role,
-    room:     'general'
-  };
+  const userInfo = { userId, socketId: socket.id, username: currentUser.username, avatar: currentUser.avatar, level: currentUser.level, role: currentUser.role, room: 'general' };
   onlineUsers.set(socket.id, userInfo);
 
-  // Broadcast updated online list
   const broadcastOnline = () => {
-    const list = Array.from(onlineUsers.values()).map(u => ({
-      userId: u.userId, username: u.username,
-      avatar: u.avatar, level: u.level, role: u.role
-    }));
-    // Deduplicate by userId
+    const list = Array.from(onlineUsers.values()).map(u => ({ userId: u.userId, username: u.username, avatar: u.avatar, level: u.level, role: u.role }));
     const seen = new Set();
     const unique = list.filter(u => { if (seen.has(u.userId)) return false; seen.add(u.userId); return true; });
     io.emit('online_users', unique);
   };
 
-  // Join room
   socket.join('general');
   socket.emit('joined_room', { room: 'general' });
-
-  // Send system message
-  const joinMsg = {
-    type: 'system',
-    content: `${currentUser.username} joined the chat`,
-    createdAt: new Date()
-  };
-  socket.to('general').emit('message', joinMsg);
+  socket.to('general').emit('message', { type: 'system', content: `${currentUser.username} joined the chat`, createdAt: new Date() });
   broadcastOnline();
 
-  // ── Handle new message ──────────────────────────────────────────
   socket.on('send_message', async (data) => {
     try {
       const { content, room = 'general' } = data;
-      if (!content || content.trim().length === 0) return;
-      if (content.length > 1000) return;
-
-      const msg = new Message({
-        author: userId, content: content.trim(), room
-      });
+      if (!content || content.trim().length === 0 || content.length > 1000) return;
+      const msg = new Message({ author: userId, content: content.trim(), room });
       await msg.save();
       await msg.populate('author', 'username avatar level role');
-
-      io.to(room).emit('message', {
-        _id:     msg._id,
-        content: msg.content,
-        room:    msg.room,
-        type:    'text',
-        author:  msg.author,
-        createdAt: msg.createdAt
-      });
-
-      // XP for chatting (throttled - only first msg per minute)
-      const recent = await Message.countDocuments({
-        author: userId,
-        createdAt: { $gte: new Date(Date.now() - 60000) }
-      });
-      if (recent <= 1) {
-        const user = await User.findById(userId);
-        if (user) await user.addXP(5);
-      }
-    } catch (err) {
-      console.error('Message error:', err);
-    }
+      io.to(room).emit('message', { _id: msg._id, content: msg.content, room: msg.room, type: 'text', author: msg.author, createdAt: msg.createdAt });
+      const recent = await Message.countDocuments({ author: userId, createdAt: { $gte: new Date(Date.now() - 60000) } });
+      if (recent <= 1) { const user = await User.findById(userId); if (user) await user.addXP(5); }
+    } catch (err) { console.error('Message error:', err); }
   });
 
-  // ── Typing indicator ────────────────────────────────────────────
   socket.on('typing', (data) => {
-    socket.to(data.room || 'general').emit('user_typing', {
-      username: currentUser.username, typing: data.typing
-    });
+    socket.to(data.room || 'general').emit('user_typing', { username: currentUser.username, typing: data.typing });
   });
 
-  // ── Disconnect ──────────────────────────────────────────────────
   socket.on('disconnect', async () => {
     onlineUsers.delete(socket.id);
     try {
-      // Only mark offline if no other sockets for this user
       const stillOnline = Array.from(onlineUsers.values()).some(u => u.userId === userId);
-      if (!stillOnline) {
-        await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
-      }
+      if (!stillOnline) await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
     } catch (e) {}
-    const leaveMsg = { type: 'system', content: `${currentUser.username} left the chat`, createdAt: new Date() };
-    socket.to('general').emit('message', leaveMsg);
+    socket.to('general').emit('message', { type: 'system', content: `${currentUser.username} left the chat`, createdAt: new Date() });
     broadcastOnline();
   });
 });
@@ -165,7 +113,7 @@ io.on('connection', async (socket) => {
 // ─── Start Server ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`\n🚀 IT Team Platform running on http://localhost:${PORT}`);
+  console.log(`\n🚀 IT Team Platform v2 running on http://localhost:${PORT}`);
   console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🗄️  Database: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/it-team-platform'}\n`);
 });
