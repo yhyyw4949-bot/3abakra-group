@@ -14,6 +14,7 @@ const challengeSchema = new mongoose.Schema({
   createdBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt:   { type: Date, default: Date.now }
 });
+challengeSchema.index({ status: 1, createdAt: -1 });
 
 const Challenge = mongoose.model('Challenge', challengeSchema);
 
@@ -30,6 +31,7 @@ const resourceSchema = new mongoose.Schema({
   featured:    { type: Boolean, default: false },
   createdAt:   { type: Date, default: Date.now }
 });
+resourceSchema.index({ category: 1, createdAt: -1 });
 
 const Resource = mongoose.model('Resource', resourceSchema);
 
@@ -39,8 +41,10 @@ const messageSchema = new mongoose.Schema({
   content:   { type: String, required: true, maxlength: 1000 },
   room:      { type: String, default: 'general' },
   type:      { type: String, enum: ['text','system'], default: 'text' },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 30 } // auto-delete after 30 days
 });
+messageSchema.index({ room: 1, createdAt: -1 }); // fast room message queries
+messageSchema.index({ author: 1, createdAt: -1 });
 
 const Message = mongoose.model('Message', messageSchema);
 

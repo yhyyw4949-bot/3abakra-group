@@ -210,5 +210,45 @@ const Follow = mongoose.model('Follow', followSchema);
 module.exports = {
   Announcement, Event, LearningPath, Poll, Blog,
   DM, Notification, Mission, UserMission, Team,
-  ShopItem, Snippet, Task, Follow
+  ShopItem, Snippet, Task, Follow,
+  VideoLesson, UploadedFile
 };
+
+const videoLessonSchema = new mongoose.Schema({
+  title:       { type: String, required: true },
+  description: { type: String, default: '' },
+  category:    { type: String, default: 'General' },
+  fileData:    { type: String, required: true },   // base64
+  fileName:    { type: String, required: true },
+  fileSize:    { type: Number, default: 0 },
+  thumbnail:   { type: String, default: '' },      // base64 thumbnail
+  duration:    { type: String, default: '' },
+  tags:        [{ type: String }],
+  author:      { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  views:       { type: Number, default: 0 },
+  likes:       [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  comments: [{
+    author:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    content:   { type: String },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  createdAt:   { type: Date, default: Date.now }
+});
+videoLessonSchema.index({ category: 1, createdAt: -1 });
+const VideoLesson = mongoose.model('VideoLesson', videoLessonSchema);
+
+// ─── Uploaded File (generic admin uploads) ───────────────
+const uploadedFileSchema = new mongoose.Schema({
+  title:     { type: String, required: true },
+  section:   { type: String, required: true }, // 'announcements','resources','challenges','projects','blog'
+  fileData:  { type: String, required: true }, // base64
+  fileName:  { type: String, required: true },
+  fileType:  { type: String, default: '' },
+  fileSize:  { type: Number, default: 0 },
+  note:      { type: String, default: '' },
+  author:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+uploadedFileSchema.index({ section: 1, createdAt: -1 });
+const UploadedFile = mongoose.model('UploadedFile', uploadedFileSchema);
+

@@ -23,7 +23,11 @@ async function renderAnnouncements() {
       <div class="page-title">Announcements</div>
       <div class="page-subtitle">Important updates from the team</div>
     </div>
-    ${State.user?.role === 'admin' ? `<button class="btn-primary" onclick="openNewAnnouncement()">+ New Announcement</button>` : ''}
+    ${State.user?.role === 'admin' ? `
+      <div style="display:flex;gap:8px">
+        <button class="btn-secondary" onclick="openAdminFileUpload('announcements','Announcements',()=>renderAnnouncements())">📎 Attach File</button>
+        <button class="btn-primary" onclick="openNewAnnouncement()">+ New Announcement</button>
+      </div>` : ''}
   </div>
   <div class="fade-in" style="display:flex;flex-direction:column;gap:12px">
     ${announcements.length === 0 ? `<div class="empty-state"><div class="empty-icon">📢</div><div class="empty-title">No announcements yet</div></div>` :
@@ -1210,3 +1214,511 @@ async function sendDM(userId) {
     openDMConversation(userId, '');
   } catch (err) { Toast.error(err.message); }
 }
+
+// ═══════════════════════════════════════════════════════
+//  SHARED FILE UPLOAD HELPER (used across all sections)
+// ═══════════════════════════════════════════════════════
+function openAdminFileUpload(section, sectionLabel, onSuccess) {
+  Modal.open(`
+    <div style="margin-bottom:14px;padding:10px;background:rgba(0,212,170,0.08);border-radius:8px;font-size:0.8rem;color:var(--accent)">
+      📎 Uploading file to: <strong>${sectionLabel}</strong>
+    </div>
+    <div class="form-group"><label>Title / Description</label>
+      <input type="text" id="afu-title" placeholder="e.g. Week 3 Slides, Project Guidelines...">
+    </div>
+    <div class="form-group">
+      <label>File</label>
+      <div id="afu-drop" style="border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer"
+        onclick="document.getElementById('afu-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondrop="afuDrop(event)">
+        <div id="afu-drop-text">
+          <div style="font-size:2rem;margin-bottom:8px">📁</div>
+          <div style="font-weight:600;margin-bottom:4px">Click or drag to upload</div>
+          <div style="font-size:0.72rem;color:var(--text-muted)">PDF, PPT, Word, Images, ZIP · Max 50MB</div>
+        </div>
+      </div>
+      <input type="file" id="afu-input" style="display:none"
+        accept=".pdf,.ppt,.pptx,.doc,.docx,.png,.jpg,.jpeg,.gif,.zip,.txt,.xlsx,.csv"
+        onchange="afuSelect(this)">
+    </div>
+    <div class="form-group"><label>Note (optional)</label>
+      <textarea id="afu-note" placeholder="Additional notes..."></textarea>
+    </div>
+    <button class="btn-primary btn-full" id="afu-btn" onclick="afuSubmit('${section}', onSuccessCallback)" disabled style="opacity:0.5">📤 Upload File</button>
+  `, 'Upload File');
+  window._afuOnSuccess = onSuccess;
+  window._afuSection = section;
+  // fix the onclick after modal renders
+  setTimeout(() => {
+    document.getElementById('afu-btn').onclick = () => afuSubmit(section);
+  }, 50);
+}
+
+function afuDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) afuProcess(file);
+}
+function afuSelect(input) {
+  if (input.files[0]) afuProcess(input.files[0]);
+}
+function afuProcess(file) {
+  if (file.size > 50 * 1024 * 1024) { Toast.error('Max 50MB'); return; }
+  const icons = { 'application/pdf':'📄', 'application/vnd.ms-powerpoint':'📊', 'application/vnd.openxmlformats-officedocument.presentationml.presentation':'📊', 'application/msword':'📝', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'📝', 'image/png':'🖼️', 'image/jpeg':'🖼️', 'application/zip':'🗜️' };
+  const icon = icons[file.type] || '📎';
+  document.getElementById('afu-drop-text').innerHTML = `
+    <div style="font-size:1.8rem;margin-bottom:6px">${icon}</div>
+    <div style="font-weight:600;font-size:0.88rem;color:var(--accent)">${file.name}</div>
+    <div style="font-size:0.72rem;color:var(--text-muted)">${(file.size/1024).toFixed(1)} KB · click to change</div>`;
+  document.getElementById('afu-drop').style.borderColor = 'var(--accent)';
+  const reader = new FileReader();
+  reader.onload = e => {
+    window._afuFile = { name: file.name, data: e.target.result, type: file.type, size: file.size };
+    const btn = document.getElementById('afu-btn');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  };
+  reader.readAsDataURL(file);
+}
+async function afuSubmit(section) {
+  const f = window._afuFile;
+  if (!f) { Toast.error('Select a file first'); return; }
+  const title = document.getElementById('afu-title')?.value?.trim();
+  if (!title) { Toast.error('Title required'); return; }
+  const note = document.getElementById('afu-note')?.value || '';
+  const btn = document.getElementById('afu-btn');
+  if (btn) { btn.textContent = '⏳ Uploading...'; btn.disabled = true; }
+  try {
+    await API.post('/api/features/uploads', {
+      title, section, fileData: f.data, fileName: f.name,
+      fileType: f.type, fileSize: f.size, note
+    });
+    window._afuFile = null;
+    Toast.success('File uploaded!');
+    Modal.close();
+    if (window._afuOnSuccess) window._afuOnSuccess();
+  } catch (err) {
+    Toast.error(err.message);
+    if (btn) { btn.textContent = '📤 Upload File'; btn.disabled = false; }
+  }
+}
+
+// ─── Download / preview any uploaded file ────────────────
+async function downloadUploadedFile(fileId) {
+  try {
+    const data = await API.get(`/api/features/uploads/${fileId}/download`);
+    const a = document.createElement('a');
+    a.href = data.fileData;
+    a.download = data.fileName;
+    a.click();
+  } catch (err) { Toast.error('Failed to download'); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  VIDEO LESSONS PAGE
+// ═══════════════════════════════════════════════════════
+let videoCatFilter = 'all';
+
+async function renderVideos() {
+  const content = document.getElementById('main-content');
+  const isAdmin = State.user?.role === 'admin';
+  let videos = [], cats = [];
+  try {
+    [videos, cats] = await Promise.all([
+      API.get(`/api/features/videos${videoCatFilter !== 'all' ? `?category=${videoCatFilter}` : ''}`),
+      API.get('/api/features/videos/categories')
+    ]);
+  } catch {}
+
+  const allCats = ['all', ...cats];
+
+  content.innerHTML = `
+  <div class="page-header fade-in">
+    <div>
+      <div class="page-title">🎬 Video Lessons</div>
+      <div class="page-subtitle">${videos.length} videos · learn programming step by step</div>
+    </div>
+    ${isAdmin ? `<button class="btn-primary" onclick="openUploadVideo()">🎬 Upload Video</button>` : ''}
+  </div>
+
+  <!-- Category filter -->
+  <div class="resources-filter fade-in" style="flex-wrap:wrap;gap:6px;margin-bottom:20px">
+    ${allCats.map(c => `
+    <button class="filter-btn ${videoCatFilter === c ? 'active' : ''}" onclick="filterVideos('${c}')">
+      ${c === 'all' ? '⬡ All' : c}
+    </button>`).join('')}
+  </div>
+
+  <!-- Video grid -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px" class="fade-in">
+    ${videos.length === 0 ? `
+    <div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🎬</div>
+      <div class="empty-title">No videos yet</div>
+      <div class="empty-sub">${isAdmin ? 'Upload your first video lesson!' : 'Check back soon!'}</div>
+      ${isAdmin ? `<button class="btn-primary" style="margin-top:16px" onclick="openUploadVideo()">🎬 Upload Video</button>` : ''}
+    </div>` :
+    videos.map(v => renderVideoCard(v, isAdmin)).join('')}
+  </div>`;
+}
+
+function renderVideoCard(v, isAdmin) {
+  const liked = (v.likes || []).includes(State.user?._id || State.user?.id);
+  return `
+  <div class="card" style="padding:0;overflow:hidden;cursor:pointer" onclick="openVideo('${v._id}')">
+    <!-- Thumbnail -->
+    <div style="width:100%;height:170px;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+      ${v.thumbnail
+        ? `<img src="${v.thumbnail}" style="width:100%;height:100%;object-fit:cover">`
+        : `<div style="text-align:center"><div style="font-size:3.5rem">🎬</div><div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">${v.fileName||''}</div></div>`}
+      <div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.7);color:#fff;font-size:0.7rem;padding:2px 7px;border-radius:4px">
+        ${v.duration || '▶'}
+      </div>
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:background 0.2s;display:flex;align-items:center;justify-content:center" class="play-overlay">
+        <div style="width:50px;height:50px;background:rgba(0,212,170,0.9);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.4rem;opacity:0;transition:opacity 0.2s" class="play-btn-icon">▶</div>
+      </div>
+    </div>
+    <!-- Info -->
+    <div style="padding:14px">
+      <div style="font-weight:700;font-size:0.92rem;margin-bottom:4px;line-height:1.3">${v.title}</div>
+      ${v.description ? `<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px;line-height:1.5">${v.description.slice(0,90)}${v.description.length>90?'...':''}</div>` : ''}
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+        <span style="background:rgba(0,212,170,0.12);color:var(--accent);font-size:0.68rem;padding:2px 8px;border-radius:4px">${v.category}</span>
+        ${(v.tags||[]).slice(0,2).map(t=>`<span class="tag">${t}</span>`).join('')}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:0.7rem;color:var(--text-muted)">
+          👁 ${v.views||0} · 💬 ${v.comments?.length||0} · by ${v.author?.username||'?'}
+        </div>
+        <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+          <button class="like-btn ${liked?'liked':''}" onclick="likeVideo('${v._id}',this)" style="font-size:0.75rem;padding:3px 8px">♥ ${v.likes?.length||0}</button>
+          ${isAdmin ? `<button class="btn-danger" style="font-size:0.65rem;padding:3px 7px" onclick="deleteVideo('${v._id}')">🗑</button>` : ''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function filterVideos(cat) {
+  videoCatFilter = cat;
+  renderVideos();
+}
+
+async function likeVideo(id, btn) {
+  try {
+    const data = await API.put(`/api/features/videos/${id}/like`);
+    btn.classList.toggle('liked', data.liked);
+    btn.textContent = `♥ ${data.likes}`;
+  } catch (err) { Toast.error(err.message); }
+}
+
+async function deleteVideo(id) {
+  if (!confirm('Delete this video?')) return;
+  try { await API.delete(`/api/features/videos/${id}`); renderVideos(); }
+  catch (err) { Toast.error(err.message); }
+}
+
+// ── Open video player modal ───────────────────────────────
+async function openVideo(id) {
+  let v;
+  try { v = await API.get(`/api/features/videos/${id}`); }
+  catch { Toast.error('Failed to load video'); return; }
+
+  const isAdmin = State.user?.role === 'admin';
+  const currentUserId = State.user?._id || State.user?.id;
+
+  Modal.open(`
+    <!-- Video player -->
+    <div style="background:#000;border-radius:10px;overflow:hidden;margin-bottom:16px;position:relative">
+      <video controls style="width:100%;max-height:360px;display:block" preload="metadata" id="video-player-${id}">
+        <source src="${v.fileData}" type="${v.fileName?.endsWith('.mp4')?'video/mp4':v.fileName?.endsWith('.webm')?'video/webm':'video/mp4'}">
+        Your browser does not support the video tag.
+      </video>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+      <h3 style="font-size:1rem;font-weight:700;flex:1;margin-right:12px">${v.title}</h3>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="like-btn ${(v.likes||[]).some(l=>l.toString()===currentUserId)?'liked':''}" id="video-like-btn" onclick="likeVideoModal('${v._id}')">♥ ${v.likes?.length||0}</button>
+        ${isAdmin ? `<button class="btn-danger" style="font-size:0.75rem" onclick="deleteVideo('${v._id}');Modal.close()">🗑 Delete</button>` : ''}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <span style="background:rgba(0,212,170,0.12);color:var(--accent);font-size:0.72rem;padding:2px 8px;border-radius:4px">${v.category}</span>
+      ${(v.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}
+    </div>
+
+    ${v.description ? `<p style="font-size:0.83rem;color:var(--text-secondary);line-height:1.7;margin-bottom:14px">${v.description}</p>` : ''}
+
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px">
+      by <strong style="color:var(--accent)">${v.author?.username||'?'}</strong> ·
+      ${formatDate(v.createdAt)} · 👁 ${v.views} views
+    </div>
+
+    <!-- Comments -->
+    <div style="border-top:1px solid var(--border);padding-top:14px">
+      <div style="font-weight:700;font-size:0.85rem;margin-bottom:12px">💬 Comments (${v.comments?.length||0})</div>
+      <div id="video-comments-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;max-height:200px;overflow-y:auto">
+        ${(v.comments||[]).length === 0
+          ? '<div style="color:var(--text-muted);font-size:0.8rem">No comments yet. Be the first!</div>'
+          : (v.comments||[]).map(c => `
+          <div style="display:flex;gap:8px;padding:8px;background:var(--bg-elevated);border-radius:8px" id="vc-${c._id}">
+            <div class="user-avatar-sm" style="width:28px;height:28px;font-size:0.68rem;flex-shrink:0">${c.author?.avatar?`<img src="${c.author.avatar}">`:((c.author?.username||'?')[0].toUpperCase())}</div>
+            <div style="flex:1">
+              <div style="font-size:0.75rem;font-weight:600;color:var(--accent)">${c.author?.username||'?'}</div>
+              <div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.5">${c.content}</div>
+            </div>
+            ${isAdmin ? `<button onclick="deleteVideoComment('${v._id}','${c._id}')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.8rem;flex-shrink:0" title="Delete">🗑</button>` : ''}
+          </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="video-comment-input" placeholder="Write a comment..." style="flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text-primary);font-size:0.82rem">
+        <button class="btn-primary" style="padding:8px 14px;font-size:0.8rem" onclick="postVideoComment('${v._id}')">Send</button>
+      </div>
+    </div>
+  `, v.title);
+
+  document.getElementById('video-comment-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') postVideoComment(v._id);
+  });
+}
+
+async function postVideoComment(videoId) {
+  const input = document.getElementById('video-comment-input');
+  const content = input?.value?.trim();
+  if (!content) return;
+  try {
+    const data = await API.post(`/api/features/videos/${videoId}/comment`, { content });
+    const list = document.getElementById('video-comments-list');
+    if (list) {
+      const c = data.comment;
+      const div = document.createElement('div');
+      div.id = `vc-${c._id}`;
+      div.style.cssText = 'display:flex;gap:8px;padding:8px;background:var(--bg-elevated);border-radius:8px';
+      div.innerHTML = `
+        <div class="user-avatar-sm" style="width:28px;height:28px;font-size:0.68rem;flex-shrink:0">${State.user.username[0].toUpperCase()}</div>
+        <div><div style="font-size:0.75rem;font-weight:600;color:var(--accent)">${State.user.username}</div>
+        <div style="font-size:0.8rem;color:var(--text-secondary)">${content}</div></div>`;
+      list.appendChild(div);
+      list.scrollTop = list.scrollHeight;
+    }
+    if (input) input.value = '';
+  } catch (err) { Toast.error(err.message); }
+}
+
+async function likeVideoModal(videoId) {
+  try {
+    const data = await API.put(`/api/features/videos/${videoId}/like`);
+    const btn = document.getElementById('video-like-btn');
+    if (btn) { btn.classList.toggle('liked', data.liked); btn.textContent = `♥ ${data.likes}`; }
+  } catch (err) { Toast.error(err.message); }
+}
+
+async function deleteVideoComment(videoId, commentId) {
+  try {
+    await API.delete(`/api/features/videos/${videoId}/comment/${commentId}`);
+    document.getElementById(`vc-${commentId}`)?.remove();
+    Toast.success('Comment deleted');
+  } catch (err) { Toast.error(err.message); }
+}
+
+// ── Upload video modal (admin) ────────────────────────────
+function openUploadVideo() {
+  Modal.open(`
+    <div class="form-group"><label>Title</label>
+      <input type="text" id="vid-title" placeholder="e.g. JavaScript Basics - Variables & Functions">
+    </div>
+    <div class="form-group"><label>Description</label>
+      <textarea id="vid-desc" placeholder="What will students learn in this video?"></textarea>
+    </div>
+    <div class="form-group"><label>Category</label>
+      <input type="text" id="vid-cat" placeholder="e.g. JavaScript, Python, Web Dev, Databases..." list="vid-cats">
+      <datalist id="vid-cats">
+        <option>JavaScript</option><option>Python</option><option>Web Dev</option>
+        <option>Databases</option><option>Cybersecurity</option><option>DevOps</option>
+        <option>Mobile Dev</option><option>Algorithms</option><option>General</option>
+      </datalist>
+    </div>
+    <div class="form-group"><label>Tags (comma-separated)</label>
+      <input type="text" id="vid-tags" placeholder="tutorial, beginner, node.js">
+    </div>
+    <div class="form-group"><label>Duration (optional)</label>
+      <input type="text" id="vid-duration" placeholder="e.g. 12:34">
+    </div>
+    <div class="form-group">
+      <label>Video File (MP4, WebM · max 100MB)</label>
+      <div id="vid-drop" style="border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer"
+        onclick="document.getElementById('vid-file-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondrop="vidDrop(event)">
+        <div id="vid-drop-text">
+          <div style="font-size:2.5rem;margin-bottom:8px">🎬</div>
+          <div style="font-weight:600;margin-bottom:4px">Click or drag video here</div>
+          <div style="font-size:0.72rem;color:var(--text-muted)">MP4, WebM · Max 100MB</div>
+        </div>
+      </div>
+      <input type="file" id="vid-file-input" style="display:none" accept="video/mp4,video/webm,.mp4,.webm" onchange="vidSelect(this)">
+    </div>
+    <div class="form-group">
+      <label>Thumbnail Image (optional)</label>
+      <input type="file" id="vid-thumb-input" accept="image/*" onchange="vidThumbSelect(this)" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:8px;width:100%;color:var(--text-primary)">
+    </div>
+    <div id="vid-upload-progress" style="display:none;margin-bottom:10px">
+      <div style="height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden">
+        <div id="vid-progress-bar" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div>
+      </div>
+      <div id="vid-progress-text" style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;text-align:center">Processing...</div>
+    </div>
+    <button class="btn-primary btn-full" id="vid-upload-btn" onclick="submitVideoUpload()" disabled style="opacity:0.5">🎬 Upload Video</button>
+  `, 'Upload Video Lesson');
+}
+
+function vidDrop(e) {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('video/')) vidProcess(f);
+  else Toast.error('Please drop a video file (MP4 or WebM)');
+}
+function vidSelect(input) { if (input.files[0]) vidProcess(input.files[0]); }
+function vidProcess(file) {
+  if (file.size > 100 * 1024 * 1024) { Toast.error('Max 100MB'); return; }
+  document.getElementById('vid-drop-text').innerHTML = `
+    <div style="font-size:2rem;margin-bottom:6px">🎬</div>
+    <div style="font-weight:600;font-size:0.85rem;color:var(--accent)">${file.name}</div>
+    <div style="font-size:0.72rem;color:var(--text-muted)">${(file.size/1024/1024).toFixed(1)} MB · click to change</div>`;
+  document.getElementById('vid-drop').style.borderColor = 'var(--accent)';
+  const prog = document.getElementById('vid-upload-progress');
+  const bar  = document.getElementById('vid-progress-bar');
+  const txt  = document.getElementById('vid-progress-text');
+  if (prog) { prog.style.display='block'; bar.style.width='0%'; txt.textContent='Reading file...'; }
+  const reader = new FileReader();
+  let progress = 0;
+  const interval = setInterval(() => {
+    progress = Math.min(progress + 5, 90);
+    if (bar) bar.style.width = progress + '%';
+  }, 100);
+  reader.onload = e => {
+    clearInterval(interval);
+    if (bar) bar.style.width = '100%';
+    if (txt) txt.textContent = 'Ready to upload!';
+    window._vidFile = { name: file.name, data: e.target.result, type: file.type, size: file.size };
+    const btn = document.getElementById('vid-upload-btn');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  };
+  reader.readAsDataURL(file);
+}
+function vidThumbSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { window._vidThumb = e.target.result; };
+  reader.readAsDataURL(file);
+}
+async function submitVideoUpload() {
+  const f = window._vidFile;
+  if (!f) { Toast.error('Select a video file'); return; }
+  const title = document.getElementById('vid-title')?.value?.trim();
+  if (!title) { Toast.error('Title required'); return; }
+  const btn = document.getElementById('vid-upload-btn');
+  if (btn) { btn.textContent = '⏳ Uploading... (may take a moment)'; btn.disabled = true; }
+  try {
+    await API.post('/api/features/videos', {
+      title,
+      description: document.getElementById('vid-desc')?.value || '',
+      category:    document.getElementById('vid-cat')?.value || 'General',
+      tags:        (document.getElementById('vid-tags')?.value||'').split(',').map(t=>t.trim()).filter(Boolean),
+      duration:    document.getElementById('vid-duration')?.value || '',
+      fileData:    f.data,
+      fileName:    f.name,
+      fileSize:    f.size,
+      thumbnail:   window._vidThumb || '',
+    });
+    window._vidFile = null;
+    window._vidThumb = null;
+    Toast.success('Video uploaded! 🎬');
+    Modal.close();
+    videoCatFilter = 'all';
+    renderVideos();
+  } catch (err) {
+    Toast.error(err.message);
+    if (btn) { btn.textContent = '🎬 Upload Video'; btn.disabled = false; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ADMIN FILE MANAGER — view/manage all uploaded files
+// ═══════════════════════════════════════════════════════
+async function renderAdminFileManager(containerEl) {
+  if (!containerEl) return;
+  containerEl.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  let files = [];
+  try { files = await API.get('/api/features/uploads'); } catch {}
+
+  const sections = ['all', 'announcements', 'resources', 'challenges', 'projects', 'blog', 'events', 'general'];
+  const sectionIcons = { announcements:'📢', resources:'📚', challenges:'⚡', projects:'◻', blog:'📝', events:'📅', general:'📁', all:'⬡' };
+
+  containerEl.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:0.8rem;color:var(--text-muted)">${files.length} total files uploaded</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${sections.map(s => `<button class="filter-btn afm-filter active" data-s="${s}" onclick="afmFilter('${s}',this)" style="${s==='all'?'':''}">
+          ${sectionIcons[s]||'📁'} ${s}</button>`).join('')}
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-bottom:14px" onclick="openAdminFileUpload('general','General Files',()=>renderAdminFileManager(document.getElementById('admin-files-container')))">📎 Upload New File</button>
+    <div id="afm-list">
+      ${files.length === 0
+        ? '<div class="empty-state" style="padding:30px"><div class="empty-icon">📁</div><div class="empty-title">No files uploaded yet</div></div>'
+        : `<div class="card" style="overflow-x:auto"><table class="admin-table">
+            <thead><tr><th>File</th><th>Section</th><th>Uploaded By</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody id="afm-tbody">
+              ${files.map(f => afmRow(f)).join('')}
+            </tbody>
+          </table></div>`}
+    </div>`;
+}
+
+function afmRow(f) {
+  const typeIcon = f.fileType?.includes('pdf') ? '📄' : f.fileType?.includes('image') ? '🖼️' : f.fileType?.includes('presentation') ? '📊' : f.fileType?.includes('word') ? '📝' : '📎';
+  return `<tr data-section="${f.section}" id="afm-row-${f._id}">
+    <td>
+      <div style="font-weight:600;font-size:0.82rem">${typeIcon} ${f.title}</div>
+      <div style="font-size:0.7rem;color:var(--text-muted)">${f.fileName} · ${f.fileSize ? (f.fileSize/1024).toFixed(0)+' KB' : ''}</div>
+      ${f.note ? `<div style="font-size:0.7rem;color:var(--text-secondary)">${f.note}</div>` : ''}
+    </td>
+    <td><span style="background:rgba(0,212,170,0.1);color:var(--accent);font-size:0.7rem;padding:2px 6px;border-radius:4px">${f.section}</span></td>
+    <td style="font-size:0.78rem">${f.author?.username || '?'}</td>
+    <td style="font-size:0.72rem;color:var(--text-muted)">${formatDate(f.createdAt)}</td>
+    <td>
+      <div style="display:flex;gap:4px">
+        <button class="btn-secondary" style="font-size:0.68rem;padding:3px 7px" onclick="downloadUploadedFile('${f._id}')">⬇ Download</button>
+        <button class="btn-danger" style="font-size:0.68rem;padding:3px 6px" onclick="afmDelete('${f._id}')">🗑</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function afmFilter(section, btn) {
+  document.querySelectorAll('.afm-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#afm-tbody tr').forEach(row => {
+    row.style.display = (section === 'all' || row.dataset.section === section) ? '' : 'none';
+  });
+}
+
+async function afmDelete(id) {
+  if (!confirm('Delete this file?')) return;
+  try {
+    await API.delete(`/api/features/uploads/${id}`);
+    document.getElementById(`afm-row-${id}`)?.remove();
+    Toast.success('File deleted');
+  } catch (err) { Toast.error(err.message); }
+}
+
+// ── Add "Upload Files" button + file attachments to key sections ──
+// Patch renderAnnouncements to show admin upload button
+const _origRenderAnnouncements = typeof renderAnnouncements === 'function' ? renderAnnouncements : null;
+
+// Inject "Admin Files" tab into admin panel
+const _origLoadAdminSection = typeof loadAdminSection === 'function' ? loadAdminSection : null;

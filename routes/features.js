@@ -6,7 +6,8 @@ const User = require('../models/User');
 const {
   Announcement, Event, LearningPath, Poll, Blog,
   DM, Notification, Mission, UserMission, Team,
-  ShopItem, Snippet, Task, Follow
+  ShopItem, Snippet, Task, Follow,
+  VideoLesson, UploadedFile
 } = require('../models/newModels');
 
 // ═══════════════════════════════════════════════
@@ -751,6 +752,151 @@ router.post('/dm/:userId/send', requireAuth, async (req, res) => {
     const lastMsg = dm.messages[dm.messages.length - 1];
     res.json({ success: true, message: lastMsg });
   } catch (err) { res.status(500).json({ error: 'Failed to send message' }); }
+});
+
+// ═══════════════════════════════════════════════
+//  VIDEO LESSONS
+// ═══════════════════════════════════════════════
+router.get('/videos', async (req, res) => {
+  try {
+    const { category } = req.query;
+    const filter = category && category !== 'all' ? { category } : {};
+    const videos = await VideoLesson.find(filter)
+      .populate('author', 'username avatar')
+      .select('-fileData -comments') // don't send file data in list
+      .sort({ createdAt: -1 });
+    res.json(videos);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch videos' }); }
+});
+
+router.get('/videos/categories', async (req, res) => {
+  try {
+    const cats = await VideoLesson.distinct('category');
+    res.json(cats);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch categories' }); }
+});
+
+router.get('/videos/:id', async (req, res) => {
+  try {
+    const video = await VideoLesson.findByIdAndUpdate(
+      req.params.id, { $inc: { views: 1 } }, { new: true }
+    )
+    .populate('author', 'username avatar level')
+    .populate('comments.author', 'username avatar');
+    if (!video) return res.status(404).json({ error: 'Not found' });
+    res.json(video);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch video' }); }
+});
+
+router.post('/videos', requireAdmin, async (req, res) => {
+  try {
+    const { title, description, category, fileData, fileName, fileSize, thumbnail, duration, tags } = req.body;
+    if (!title || !fileData || !fileName) return res.status(400).json({ error: 'Title and video file required' });
+    if (fileSize > 100 * 1024 * 1024) return res.status(400).json({ error: 'Video too large (max 100MB)' });
+    const video = await VideoLesson.create({
+      title, description, category: category || 'General',
+      fileData, fileName, fileSize, thumbnail, duration,
+      tags: tags || [], author: req.session.userId
+    });
+    res.json({ success: true, video: { ...video.toObject(), fileData: undefined } });
+  } catch (err) { res.status(500).json({ error: 'Failed to upload video' }); }
+});
+
+router.put('/videos/:id/like', requireAuth, async (req, res) => {
+  try {
+    const video = await VideoLesson.findById(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Not found' });
+    const uid = req.session.userId;
+    const liked = video.likes.includes(uid);
+    if (liked) video.likes.pull(uid); else video.likes.push(uid);
+    await video.save();
+    res.json({ success: true, likes: video.likes.length, liked: !liked });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.post('/videos/:id/comment', requireAuth, async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ error: 'Content required' });
+    const video = await VideoLesson.findById(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Not found' });
+    video.comments.push({ author: req.session.userId, content });
+    await video.save();
+    await video.populate('comments.author', 'username avatar');
+    res.json({ success: true, comment: video.comments[video.comments.length - 1] });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.delete('/videos/:id/comment/:commentId', requireAdmin, async (req, res) => {
+  try {
+    const video = await VideoLesson.findById(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Not found' });
+    video.comments.pull({ _id: req.params.commentId });
+    await video.save();
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.delete('/videos/:id', requireAdmin, async (req, res) => {
+  try {
+    await VideoLesson.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// ═══════════════════════════════════════════════
+//  ADMIN FILE UPLOADS (any section)
+// ═══════════════════════════════════════════════
+router.get('/uploads', requireAdmin, async (req, res) => {
+  try {
+    const { section } = req.query;
+    const filter = section ? { section } : {};
+    const files = await UploadedFile.find(filter)
+      .populate('author', 'username')
+      .select('-fileData')
+      .sort({ createdAt: -1 });
+    res.json(files);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch uploads' }); }
+});
+
+router.get('/uploads/:id/download', requireAuth, async (req, res) => {
+  try {
+    const file = await UploadedFile.findById(req.params.id).select('fileData fileName fileType');
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    res.json({ fileData: file.fileData, fileName: file.fileName, fileType: file.fileType });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.post('/uploads', requireAdmin, async (req, res) => {
+  try {
+    const { title, section, fileData, fileName, fileType, fileSize, note } = req.body;
+    if (!title || !fileData || !fileName) return res.status(400).json({ error: 'Title and file required' });
+    if (fileSize > 50 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 50MB)' });
+    const uploaded = await UploadedFile.create({
+      title, section: section || 'general',
+      fileData, fileName, fileType, fileSize, note,
+      author: req.session.userId
+    });
+    res.json({ success: true, file: { ...uploaded.toObject(), fileData: undefined } });
+  } catch (err) { res.status(500).json({ error: 'Failed to upload' }); }
+});
+
+router.delete('/uploads/:id', requireAdmin, async (req, res) => {
+  try {
+    await UploadedFile.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// Admin delete any blog comment
+router.delete('/blogs/:id/comment/:commentId', requireAdmin, async (req, res) => {
+  try {
+    const blog = await Blog.findById(req.params.id);
+    if (!blog) return res.status(404).json({ error: 'Not found' });
+    blog.comments.pull({ _id: req.params.commentId });
+    await blog.save();
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
 
 module.exports = router;

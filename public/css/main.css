@@ -1238,3 +1238,45 @@ body {
 .blog-content h1,.blog-content h2,.blog-content h3 { color: var(--text-primary); margin: 16px 0 8px; font-family: var(--font-display); }
 .blog-content code { background: var(--bg-elevated); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); }
 .blog-content pre { background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 12px 0; }
+
+/* ═══════════════════════════════════════════════
+   SKELETON LOADING SCREENS
+════════════════════════════════════════════════ */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-surface) 50%, var(--bg-elevated) 75%);
+  background-size: 600px 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 8px;
+}
+.skeleton-wrap { padding: 4px 0; }
+.skeleton-title { height: 36px; width: 260px; margin-bottom: 10px; }
+.skeleton-sub   { height: 18px; width: 180px; margin-bottom: 24px; opacity: 0.6; }
+.skeleton-card  { height: 180px; border-radius: 12px; }
+
+/* ═══════════════════════════════════════════════
+   CHAT DELETE + VIDEO CARDS
+════════════════════════════════════════════════ */
+.chat-delete-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 0.75rem;
+  padding: 2px 4px; border-radius: 4px;
+  opacity: 0; transition: opacity 0.2s;
+  margin-left: 4px;
+}
+.chat-msg:hover .chat-delete-btn { opacity: 1; }
+.chat-delete-btn:hover { color: #ff4444; background: rgba(255,68,68,0.1); }
+
+/* Video card hover effect */
+.card:hover .play-overlay { background: rgba(0,0,0,0.3) !important; }
+.card:hover .play-btn-icon { opacity: 1 !important; }
+
+/* Video modal player */
+video { outline: none; }
+
+/* Admin file manager */
+.afm-filter { font-size: 0.72rem; padding: 4px 10px; }
+.afm-filter.active { background: var(--accent); color: #000; border-color: var(--accent); }

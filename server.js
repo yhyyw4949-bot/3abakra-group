@@ -1,60 +1,119 @@
-// server.js - Main Express + Socket.io server (v2 with all new features)
+// server.js - Optimized v2.1
 require('dotenv').config();
-const express    = require('express');
-const http       = require('http');
-const { Server } = require('socket.io');
-const session    = require('express-session');
-const MongoStore = require('connect-mongo');
-const path       = require('path');
-const connectDB  = require('./config/database');
+const express     = require('express');
+const http        = require('http');
+const { Server }  = require('socket.io');
+const session     = require('express-session');
+const MongoStore  = require('connect-mongo');
+const path        = require('path');
+const compression = require('compression');
+const connectDB   = require('./config/database');
 const { attachUser } = require('./middleware/auth');
 
 const app    = express();
 const server = http.createServer(app);
-const io     = new Server(server, { cors: { origin: '*' } });
+const io     = new Server(server, {
+  cors: { origin: '*' },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  transports: ['websocket', 'polling'],
+});
 
-// ─── Connect Database ───────────────────────────────────────────
 connectDB();
 
-// ─── Session Config ─────────────────────────────────────────────
+// ─── Session ─────────────────────────────────────────────
 const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'dev-secret-key',
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/it-team-platform'
+    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/it-team-platform',
+    touchAfter: 24 * 3600,
+    ttl: 7 * 24 * 60 * 60,
   }),
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
+  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, httpOnly: true }
 });
 
-// ─── Middleware ──────────────────────────────────────────────────
+// ─── Middleware ───────────────────────────────────────────
+app.use(compression()); // gzip — biggest speed win
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '7d', etag: true, lastModified: true,
+}));
 app.use(attachUser);
 
-// ─── API Routes ──────────────────────────────────────────────────
-app.use('/api/auth',       require('./routes/auth'));
-app.use('/api/projects',   require('./routes/projects'));
-app.use('/api/challenges', require('./routes/challenges'));
-app.use('/api/resources',  require('./routes/resources'));
-app.use('/api/users',      require('./routes/users'));
-app.use('/api/chat',       require('./routes/chat'));
-app.use('/api/features',   require('./routes/features')); // ← NEW
+// ─── Simple in-memory API cache ───────────────────────────
+const _cache = new Map();
+global.apiCache = {
+  get(key) {
+    const item = _cache.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expires) { _cache.delete(key); return null; }
+    return item.data;
+  },
+  set(key, data, ttlMs = 20000) {
+    _cache.set(key, { data, expires: Date.now() + ttlMs });
+  },
+  del(pattern) {
+    for (const k of _cache.keys()) { if (k.startsWith(pattern)) _cache.delete(k); }
+  }
+};
+// Clean expired every 2 min
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of _cache.entries()) { if (now > v.expires) _cache.delete(k); }
+}, 120000);
 
-// ─── Serve SPA ───────────────────────────────────────────────────
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// ─── Rate limiting ────────────────────────────────────────
+const _rl = new Map();
+function rateLimit(max = 60, windowMs = 60000) {
+  return (req, res, next) => {
+    const key = req.session?.userId || req.ip;
+    const now = Date.now();
+    const r = _rl.get(key) || { n: 0, t: now };
+    if (now - r.t > windowMs) { r.n = 0; r.t = now; }
+    r.n++; _rl.set(key, r);
+    if (r.n > max) return res.status(429).json({ error: 'Too many requests' });
+    next();
+  };
+}
+setInterval(() => { const n = Date.now(); for (const [k,v] of _rl.entries()) if (n-v.t > 120000) _rl.delete(k); }, 300000);
 
-// ─── Socket.io ────────────────────────────────────────────────
-const wrap = middleware => (socket, next) => middleware(socket.request, {}, next);
+// ─── Routes ───────────────────────────────────────────────
+app.use('/api/auth',       rateLimit(20, 60000), require('./routes/auth'));
+app.use('/api/projects',   rateLimit(60, 60000), require('./routes/projects'));
+app.use('/api/challenges', rateLimit(60, 60000), require('./routes/challenges'));
+app.use('/api/resources',  rateLimit(60, 60000), require('./routes/resources'));
+app.use('/api/users',      rateLimit(60, 60000), require('./routes/users'));
+app.use('/api/chat',       rateLimit(60, 60000), require('./routes/chat'));
+app.use('/api/features',   rateLimit(60, 60000), require('./routes/features'));
+
+app.get('/health', (req, res) => res.json({ status: 'ok', uptime: Math.floor(process.uptime()) }));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+// ─── Socket.io ────────────────────────────────────────────
+const wrap = m => (s, next) => m(s.request, {}, next);
 io.use(wrap(sessionMiddleware));
 
 const onlineUsers = new Map();
 const User        = require('./models/User');
 const { Message } = require('./models/models');
+
+let broadcastPending = false;
+function scheduleBroadcast() {
+  if (broadcastPending) return;
+  broadcastPending = true;
+  setTimeout(() => {
+    const seen = new Set();
+    const list = Array.from(onlineUsers.values())
+      .filter(u => { if (seen.has(u.userId)) return false; seen.add(u.userId); return true; })
+      .map(({ userId, username, avatar, level, role }) => ({ userId, username, avatar, level, role }));
+    io.emit('online_users', list);
+    broadcastPending = false;
+  }, 500);
+}
 
 io.on('connection', async (socket) => {
   const userId = socket.request.session?.userId;
@@ -62,58 +121,49 @@ io.on('connection', async (socket) => {
 
   let currentUser;
   try {
-    currentUser = await User.findById(userId).select('username avatar level role');
+    currentUser = await User.findById(userId).select('username avatar level role').lean();
     if (!currentUser) { socket.disconnect(); return; }
-    await User.findByIdAndUpdate(userId, { isOnline: true });
+    User.findByIdAndUpdate(userId, { isOnline: true }).exec();
   } catch (e) { socket.disconnect(); return; }
 
-  const userInfo = { userId, socketId: socket.id, username: currentUser.username, avatar: currentUser.avatar, level: currentUser.level, role: currentUser.role, room: 'general' };
-  onlineUsers.set(socket.id, userInfo);
-
-  const broadcastOnline = () => {
-    const list = Array.from(onlineUsers.values()).map(u => ({ userId: u.userId, username: u.username, avatar: u.avatar, level: u.level, role: u.role }));
-    const seen = new Set();
-    const unique = list.filter(u => { if (seen.has(u.userId)) return false; seen.add(u.userId); return true; });
-    io.emit('online_users', unique);
-  };
-
+  onlineUsers.set(socket.id, { userId, socketId: socket.id, ...currentUser });
   socket.join('general');
   socket.emit('joined_room', { room: 'general' });
-  socket.to('general').emit('message', { type: 'system', content: `${currentUser.username} joined the chat`, createdAt: new Date() });
-  broadcastOnline();
+  socket.to('general').emit('message', { type:'system', content:`${currentUser.username} joined the chat`, createdAt: new Date() });
+  scheduleBroadcast();
 
-  socket.on('send_message', async (data) => {
+  const msgTs = [];
+  socket.on('send_message', async ({ content, room = 'general' } = {}) => {
     try {
-      const { content, room = 'general' } = data;
-      if (!content || content.trim().length === 0 || content.length > 1000) return;
+      const now = Date.now();
+      while (msgTs.length && now - msgTs[0] > 5000) msgTs.shift();
+      if (msgTs.length >= 5) return socket.emit('error', { message: 'Slow down!' });
+      msgTs.push(now);
+      if (!content?.trim() || content.length > 1000) return;
       const msg = new Message({ author: userId, content: content.trim(), room });
       await msg.save();
       await msg.populate('author', 'username avatar level role');
-      io.to(room).emit('message', { _id: msg._id, content: msg.content, room: msg.room, type: 'text', author: msg.author, createdAt: msg.createdAt });
-      const recent = await Message.countDocuments({ author: userId, createdAt: { $gte: new Date(Date.now() - 60000) } });
-      if (recent <= 1) { const user = await User.findById(userId); if (user) await user.addXP(5); }
-    } catch (err) { console.error('Message error:', err); }
+      io.to(room).emit('message', { _id: msg._id, content: msg.content, room, type:'text', author: msg.author, createdAt: msg.createdAt });
+      const recent = await Message.countDocuments({ author: userId, createdAt: { $gte: new Date(Date.now()-60000) } });
+      if (recent <= 1) { const u = await User.findById(userId); if (u) u.addXP(5); }
+    } catch (err) { console.error('Msg err:', err.message); }
   });
 
-  socket.on('typing', (data) => {
-    socket.to(data.room || 'general').emit('user_typing', { username: currentUser.username, typing: data.typing });
+  socket.on('typing', ({ room: r = 'general', typing } = {}) => {
+    socket.to(r).emit('user_typing', { username: currentUser.username, typing });
   });
 
-  socket.on('disconnect', async () => {
+  socket.on('disconnect', () => {
     onlineUsers.delete(socket.id);
-    try {
-      const stillOnline = Array.from(onlineUsers.values()).some(u => u.userId === userId);
-      if (!stillOnline) await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
-    } catch (e) {}
-    socket.to('general').emit('message', { type: 'system', content: `${currentUser.username} left the chat`, createdAt: new Date() });
-    broadcastOnline();
+    const stillOnline = Array.from(onlineUsers.values()).some(u => u.userId === userId);
+    if (!stillOnline) User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() }).exec();
+    socket.to('general').emit('message', { type:'system', content:`${currentUser.username} left the chat`, createdAt: new Date() });
+    scheduleBroadcast();
   });
 });
 
-// ─── Start Server ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`\n🚀 IT Team Platform v2 running on http://localhost:${PORT}`);
-  console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🗄️  Database: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/it-team-platform'}\n`);
+  console.log(`\n🚀 IT Team Platform v2.1 — http://localhost:${PORT}`);
+  console.log(`📦 ${process.env.NODE_ENV || 'development'} mode\n`);
 });

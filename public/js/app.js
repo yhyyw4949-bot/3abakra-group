@@ -1,6 +1,5 @@
 /**
- * IT Team Platform v2 — Complete App.js
- * All old + new features integrated
+ * IT Team Platform v2.1 — Complete App.js (Performance Optimized)
  */
 'use strict';
 
@@ -13,23 +12,48 @@ const State = {
 };
 
 // ═══════════════════════════════════════════════════════
-//  API HELPER
+//  PAGE CACHE — avoid re-fetching same data repeatedly
+// ═══════════════════════════════════════════════════════
+const PageCache = {
+  _store: new Map(),
+  _ttl: 20000, // 20 seconds
+  get(key) {
+    const item = this._store.get(key);
+    if (!item) return null;
+    if (Date.now() > item.exp) { this._store.delete(key); return null; }
+    return item.data;
+  },
+  set(key, data, ttl = this._ttl) {
+    this._store.set(key, { data, exp: Date.now() + ttl });
+  },
+  del(key) { this._store.delete(key); },
+  clear() { this._store.clear(); },
+};
+
+// ═══════════════════════════════════════════════════════
+//  API HELPER — with caching for GET requests
 // ═══════════════════════════════════════════════════════
 const API = {
   async request(method, url, body = null) {
     const opts = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' };
     if (body) opts.body = JSON.stringify(body);
+    // Cache GET requests
+    if (method === 'GET') {
+      const cached = PageCache.get(url);
+      if (cached) return cached;
+    }
     try {
       const res = await fetch(url, opts);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Request failed');
+      if (method === 'GET') PageCache.set(url, data);
       return data;
     } catch (err) { throw err; }
   },
   get:    (url)       => API.request('GET', url),
-  post:   (url, body) => API.request('POST', url, body),
-  put:    (url, body) => API.request('PUT', url, body),
-  delete: (url)       => API.request('DELETE', url),
+  post:   (url, body) => { PageCache.clear(); return API.request('POST', url, body); },
+  put:    (url, body) => { PageCache.clear(); return API.request('PUT', url, body); },
+  delete: (url)       => { PageCache.clear(); return API.request('DELETE', url); },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -191,11 +215,19 @@ document.getElementById('menu-toggle').addEventListener('click', () => document.
 document.getElementById('sidebar-avatar').addEventListener('click', () => { if (State.user) openUserProfile(State.user._id || State.user.id); });
 
 // ═══════════════════════════════════════════════════════
-//  PAGE RENDERER
+//  PAGE RENDERER — with skeleton loading
 // ═══════════════════════════════════════════════════════
 async function renderPage(page) {
   const content = document.getElementById('main-content');
-  content.innerHTML = `<div class="loading"><div class="spinner"></div> Loading...</div>`;
+  // Show skeleton immediately — feels much faster
+  content.innerHTML = `
+    <div class="skeleton-wrap fade-in">
+      <div class="skeleton skeleton-title"></div>
+      <div class="skeleton skeleton-sub"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:20px">
+        ${[1,2,3].map(()=>`<div class="skeleton skeleton-card"></div>`).join('')}
+      </div>
+    </div>`;
   switch (page) {
     case 'dashboard':     await renderDashboard(); break;
     case 'leaderboard':   await renderLeaderboard(); break;
@@ -215,6 +247,7 @@ async function renderPage(page) {
     case 'teams':         await renderTeams(); break;
     case 'shop':          await renderShop(); break;
     case 'snippets':      await renderSnippets(); break;
+    case 'videos':        await renderVideos(); break;
     case 'dms':           await renderDMs(); break;
     default: content.innerHTML = `<div class="empty-state"><div class="empty-icon">◻</div><div class="empty-title">Page not found</div></div>`;
   }
@@ -240,11 +273,19 @@ async function pollNotifications() {
 async function renderDashboard() {
   const u = State.user;
   const content = document.getElementById('main-content');
-  let recentChallenges = [], recentProjects = [], missions = [], announcements = [];
-  try { const c = await API.get('/api/challenges'); recentChallenges = c.slice(0,3); } catch {}
-  try { const p = await API.get('/api/projects?limit=3'); recentProjects = p.projects || []; } catch {}
-  try { missions = await API.get('/api/features/missions'); } catch {}
-  try { const a = await API.get('/api/features/announcements'); announcements = a.slice(0,2); } catch {}
+
+  // Fetch ALL data in parallel — 4x faster than sequential awaits
+  const [recentChallenges, projectData, missions, announcements] = await Promise.allSettled([
+    API.get('/api/challenges'),
+    API.get('/api/projects?limit=3'),
+    API.get('/api/features/missions'),
+    API.get('/api/features/announcements'),
+  ]);
+
+  const challenges    = recentChallenges.value?.slice(0,3) || [];
+  const recentProjects= projectData.value?.projects || [];
+  const missionList   = missions.value || [];
+  const annList       = (announcements.value || []).slice(0,2);
 
   const xpProg = u.xpProgress || 0;
   const xpNext = u.xpForNextLevel;
@@ -282,7 +323,6 @@ async function renderDashboard() {
       <button class="btn-secondary" style="width:100%" onclick="openEditProfile()">Edit Profile</button>
     </div>
     <div class="dash-right">
-      <!-- Quick Actions -->
       <div class="card">
         <div class="section-heading">Quick Actions</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -294,11 +334,10 @@ async function renderDashboard() {
           <button class="btn-secondary" onclick="navigateTo('shop')">🎰 XP Shop</button>
         </div>
       </div>
-      <!-- Announcements -->
-      ${announcements.length > 0 ? `
+      ${annList.length > 0 ? `
       <div class="card">
         <div class="section-heading">Latest Announcements</div>
-        ${announcements.map(a => `
+        ${annList.map(a => `
         <div class="activity-item">
           <div class="activity-dot"></div>
           <div>
@@ -308,11 +347,10 @@ async function renderDashboard() {
         </div>`).join('')}
         <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="navigateTo('announcements')">View All →</button>
       </div>` : ''}
-      <!-- Daily Missions -->
-      ${missions.length > 0 ? `
+      ${missionList.length > 0 ? `
       <div class="card">
         <div class="section-heading">Daily Missions</div>
-        ${missions.map(m => `
+        ${missionList.map(m => `
         <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
           <div style="flex:1">
             <div style="font-size:0.82rem;font-weight:600">${m.title}</div>
@@ -323,18 +361,16 @@ async function renderDashboard() {
             : `<div style="width:60px;height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round((m.progress||0)/m.target*100)}%;background:var(--accent);border-radius:3px"></div></div>`}
         </div>`).join('')}
       </div>` : ''}
-      <!-- Recent Challenges -->
       <div class="card">
         <div class="section-heading">Open Challenges</div>
-        ${recentChallenges.length === 0 ? '<div class="empty-state" style="padding:16px"><div class="empty-sub">No challenges yet</div></div>' :
-          recentChallenges.map(c => `
+        ${challenges.length === 0 ? '<div class="empty-state" style="padding:16px"><div class="empty-sub">No challenges yet</div></div>' :
+          challenges.map(c => `
           <div class="activity-item">
             <div class="activity-dot" style="background:${diffColor(c.difficulty)}"></div>
             <div><div class="activity-text">${c.title}</div><div class="activity-time">⚡ ${c.xpReward} XP · ${c.difficulty}</div></div>
           </div>`).join('')}
         <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="navigateTo('challenges')">View All →</button>
       </div>
-      <!-- Recent Projects -->
       <div class="card">
         <div class="section-heading">Recent Projects</div>
         ${recentProjects.length === 0 ? '<div class="empty-state" style="padding:16px"><div class="empty-sub">No projects yet</div></div>' :
@@ -636,7 +672,12 @@ function renderChat() {
   <div class="page-header fade-in"><div><div class="page-title">Team Chat</div><div class="page-subtitle">Real-time team communication</div></div></div>
   <div class="chat-layout fade-in">
     <div class="chat-main">
-      <div class="chat-header"><div class="chat-header-dot"></div><span class="chat-room-name"># general</span><span class="chat-room-desc">Team general discussion</span></div>
+      <div class="chat-header">
+        <div class="chat-header-dot"></div>
+        <span class="chat-room-name"># general</span>
+        <span class="chat-room-desc">Team general discussion</span>
+        ${State.user?.role === 'admin' ? `<button class="btn-danger" style="margin-left:auto;font-size:0.72rem;padding:4px 10px" onclick="clearAllChat()">🗑 Clear Chat</button>` : ''}
+      </div>
       <div class="chat-messages" id="chat-messages"><div class="loading"><div class="spinner"></div></div></div>
       <div class="chat-typing" id="chat-typing"></div>
       <div class="chat-input-area">
@@ -668,10 +709,40 @@ async function loadChatMessages() {
 }
 
 function renderChatMessage(msg) {
-  if (msg.type==='system') return `<div class="chat-system-msg">${msg.content}</div>`;
-  const u=msg.author||{};
-  const roleClass=u.role==='admin'?'chat-msg-role-admin':'chat-msg-role-member';
-  return `<div class="chat-msg"><div class="chat-msg-avatar" onclick="openUserProfile('${u._id||''}')">${u.avatar?`<img src="${u.avatar}">`:((u.username||'?')[0].toUpperCase())}</div><div class="chat-msg-body"><div class="chat-msg-header"><span class="chat-msg-user ${roleClass}">${u.username||'Unknown'}${u.role==='admin'?' 👑':''}</span><span class="chat-msg-time">${formatTime(msg.createdAt)}</span></div><div class="chat-msg-content">${escapeHTML(msg.content)}</div></div></div>`;
+  if (msg.type === 'system') return `<div class="chat-system-msg">${msg.content}</div>`;
+  const u = msg.author || {};
+  const isAdmin = State.user?.role === 'admin';
+  const roleClass = u.role === 'admin' ? 'chat-msg-role-admin' : 'chat-msg-role-member';
+  return `<div class="chat-msg" data-id="${msg._id}">
+    <div class="chat-msg-avatar" onclick="openUserProfile('${u._id||''}')">${u.avatar?`<img src="${u.avatar}">`:((u.username||'?')[0].toUpperCase())}</div>
+    <div class="chat-msg-body">
+      <div class="chat-msg-header">
+        <span class="chat-msg-user ${roleClass}">${u.username||'Unknown'}${u.role==='admin'?' 👑':''}</span>
+        <span class="chat-msg-time">${formatTime(msg.createdAt)}</span>
+        ${isAdmin && msg._id ? `<button class="chat-delete-btn" onclick="deleteChatMessage('${msg._id}',this)" title="Delete message">🗑</button>` : ''}
+      </div>
+      <div class="chat-msg-content">${escapeHTML(msg.content)}</div>
+    </div>
+  </div>`;
+}
+
+async function deleteChatMessage(id, btn) {
+  if (!confirm('Delete this message?')) return;
+  try {
+    await API.delete(`/api/chat/messages/${id}`);
+    const msgEl = btn.closest('.chat-msg');
+    if (msgEl) msgEl.remove();
+    Toast.success('Message deleted');
+  } catch (err) { Toast.error(err.message); }
+}
+
+async function clearAllChat() {
+  if (!confirm('Clear ALL messages in this chat? This cannot be undone.')) return;
+  try {
+    await API.delete('/api/chat/messages/room/general');
+    document.getElementById('chat-messages').innerHTML = '<div class="chat-system-msg">Chat cleared by admin.</div>';
+    Toast.success('Chat cleared');
+  } catch (err) { Toast.error(err.message); }
 }
 
 function appendChatMessage(msg) {
@@ -716,20 +787,29 @@ async function renderAdmin() {
     <button class="admin-tab" data-section="resources-admin">Resources</button>
     <button class="admin-tab" data-section="missions-admin">Missions</button>
     <button class="admin-tab" data-section="shop-admin">Shop</button>
+    <button class="admin-tab" data-section="files-admin">📁 Files</button>
   </div>
   <div id="admin-users" class="admin-section active"><div class="loading"><div class="spinner"></div></div></div>
   <div id="admin-challenges-admin" class="admin-section"></div>
   <div id="admin-projects-admin" class="admin-section"></div>
   <div id="admin-resources-admin" class="admin-section"></div>
   <div id="admin-missions-admin" class="admin-section"></div>
-  <div id="admin-shop-admin" class="admin-section"></div>`;
+  <div id="admin-shop-admin" class="admin-section"></div>
+  <div id="admin-files-admin" class="admin-section"><div id="admin-files-container"></div></div>`;
   document.querySelectorAll('.admin-tab').forEach(tab=>{
     tab.addEventListener('click',()=>{
       document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
       document.querySelectorAll('.admin-section').forEach(s=>s.classList.remove('active'));
       tab.classList.add('active');
       const section=document.getElementById(`admin-${tab.dataset.section}`);
-      if(section){section.classList.add('active');loadAdminSection(tab.dataset.section);}
+      if(section){
+        section.classList.add('active');
+        if(tab.dataset.section === 'files-admin') {
+          renderAdminFileManager(document.getElementById('admin-files-container'));
+        } else {
+          loadAdminSection(tab.dataset.section);
+        }
+      }
     });
   });
   loadAdminSection('users');
