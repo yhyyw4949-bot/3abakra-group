@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IT Team Platform </title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+<!-- Auth Screen -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-bg">
+    <div class="grid-overlay"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="auth-container">
+    <div class="auth-brand">
+      <div class="brand-icon"><span class="icon-code">&lt;/&gt;</span></div>
+      <h1 class="brand-name">IT<span class="accent">Team</span></h1>
+      <p class="brand-sub">Developer Community Platform</p>
+    </div>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Sign In</button>
+        <button class="auth-tab" data-tab="register">Register</button>
+      </div>
+      <!-- Login Form -->
+      <div id="login-form" class="auth-form active">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="dev@example.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button class="btn-primary btn-full" id="login-btn">
+          <span>Sign In</span><span class="btn-arrow">→</span>
+        </button>
+        <p id="login-error" class="form-error"></p>
+      </div>
+      <!-- Register Form -->
+      <div id="register-form" class="auth-form">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="reg-username" placeholder="cooldev42" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="dev@example.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="reg-password" placeholder="Min 6 characters" autocomplete="new-password">
+        </div>
+        <button class="btn-primary btn-full" id="register-btn">
+          <span>Create Account</span><span class="btn-arrow">→</span>
+        </button>
+        <p id="register-error" class="form-error"></p>
+      </div>
+    </div>
+    <p class="auth-hint">First registration gets admin access.</p>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="app" class="app hidden">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon-sm">&lt;/&gt;</div>
+      <span class="brand-text">IT<span class="accent">Team</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">⬡</span><span class="nav-label">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-page="leaderboard">
+        <span class="nav-icon">◈</span><span class="nav-label">Leaderboard</span>
+      </a>
+      <a href="#" class="nav-item" data-page="challenges">
+        <span class="nav-icon">⚡</span><span class="nav-label">Challenges</span>
+      </a>
+      <a href="#" class="nav-item" data-page="projects">
+        <span class="nav-icon">◻</span><span class="nav-label">Projects</span>
+      </a>
+      <a href="#" class="nav-item" data-page="resources">
+        <span class="nav-icon">◈</span><span class="nav-label">Resources</span>
+      </a>
+      <a href="#" class="nav-item" data-page="chat">
+        <span class="nav-icon">◉</span><span class="nav-label">Team Chat</span>
+        <span class="nav-badge" id="chat-badge" style="display:none">0</span>
+      </a>
+    </nav>
+    <div class="sidebar-bottom">
+      <a href="#" class="nav-item admin-nav hidden" data-page="admin" id="admin-nav-link">
+        <span class="nav-icon">⬡</span><span class="nav-label">Admin Panel</span>
+      </a>
+      <div class="sidebar-user" id="sidebar-user">
+        <div class="sidebar-avatar" id="sidebar-avatar">?</div>
+        <div class="sidebar-info">
+          <div class="sidebar-username" id="sidebar-username">Loading...</div>
+          <div class="sidebar-level" id="sidebar-level">Lv.1</div>
+        </div>
+        <button class="logout-btn" id="logout-btn" title="Logout">⏏</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Mobile Header -->
+  <header class="mobile-header">
+    <button class="menu-toggle" id="menu-toggle">☰</button>
+    <span class="mobile-brand">IT<span class="accent">Team</span></span>
+    <div class="mobile-user" id="mobile-user-avatar"></div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content" id="main-content">
+    <!-- Pages are injected here by JS -->
+  </main>
+</div>
+
+<!-- Toast Notifications -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- XP Popup -->
+<div id="xp-popup" class="xp-popup hidden">
+  <span class="xp-icon">⚡</span>
+  <span id="xp-popup-text">+50 XP</span>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div id="modal-box" class="modal-box">
+    <button class="modal-close" id="modal-close">✕</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
