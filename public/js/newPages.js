@@ -1747,9 +1747,16 @@ async function renderCourses() {
   const content = document.getElementById('main-content');
   const isAdmin = State.user?.role === 'admin';
 
-  // Show subjects grid
-  let subjects = [];
-  try { subjects = await API.get('/api/features/courses/subjects'); } catch {}
+  // Always show all 11 subjects — fetch counts separately
+  let subjectCounts = {};
+  try {
+    const data = await API.get('/api/features/courses/subjects');
+    if (Array.isArray(data)) {
+      data.forEach(s => { subjectCounts[s.subject] = s; });
+    }
+  } catch(e) { console.warn('Could not load subject counts', e.message); }
+
+  const allSubjects = Object.keys(COURSE_META);
 
   content.innerHTML = `
   <div class="page-header fade-in">
@@ -1760,16 +1767,17 @@ async function renderCourses() {
     ${isAdmin ? `<button class="btn-primary" onclick="openCreateCourse()">+ New Course</button>` : ''}
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px" class="fade-in" id="subjects-grid">
-    ${subjects.map(s => {
-      const m = COURSE_META[s.subject] || { name: s.subject, icon: '📚', color: '#c9a84c', eng: s.subject };
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-top:4px" class="fade-in">
+    ${allSubjects.map(key => {
+      const m = COURSE_META[key];
+      const counts = subjectCounts[key] || { courses: 0, lessons: 0 };
       return `
-      <div class="subject-card" onclick="openSubject('${s.subject}')" style="--subj-color:${m.color}">
+      <div class="subject-card" onclick="openSubject('${key}')" style="--subj-color:${m.color}">
         <div class="subject-icon">${m.icon}</div>
-        <div class="subject-name-en" style="font-size:1rem;margin-bottom:6px">${m.name}</div>
+        <div class="subject-name-en">${m.name}</div>
         <div class="subject-stats">
-          <span>${s.courses} courses</span>
-          <span>${s.lessons} lessons</span>
+          <span>${counts.courses || 0} courses</span>
+          <span>${counts.lessons || 0} lessons</span>
         </div>
       </div>`;
     }).join('')}
@@ -1863,7 +1871,7 @@ async function openCourse(subject, courseId) {
         <div class="page-subtitle">${m.name} · ${course.lessons.length} lessons</div>
       </div>
     </div>
-    ${isAdmin ? `<button class="btn-primary" onclick="openAddLesson('${courseId}')">+ إضافة lessons</button>` : ''}
+    ${isAdmin ? `<button class="btn-primary" onclick="openAddLesson('${courseId}')">+ Add Lesson</button>` : ''}
   </div>
 
   ${course.description ? `<div class="card fade-in" style="margin-bottom:16px;padding:14px 18px"><p style="color:var(--text-secondary);font-size:0.85rem;line-height:1.8">${course.description}</p></div>` : ''}
@@ -1884,7 +1892,7 @@ async function openCourse(subject, courseId) {
     <div class="empty-state">
       <div class="empty-icon">📚</div>
       <div class="empty-title">No lessons yet</div>
-      ${isAdmin ? `<button class="btn-primary" style="margin-top:12px" onclick="openAddLesson('${courseId}')">+ إضافة lessons</button>` : ''}
+      ${isAdmin ? `<button class="btn-primary" style="margin-top:12px" onclick="openAddLesson('${courseId}')">+ Add Lesson</button>` : ''}
     </div>` :
     course.lessons.map((l, i) => renderLessonRow(l, i, completed.includes(l._id?.toString()), courseId, isAdmin)).join('')}
   </div>`;
@@ -1940,12 +1948,12 @@ async function openLesson(courseId, lessonId, type, title) {
   } else if (type === 'link' && externalUrl) {
     playerHTML = `<div style="text-align:center;padding:30px">
       <div style="font-size:3rem;margin-bottom:12px">🔗</div>
-      <a href="${externalUrl}" target="_blank" class="btn-primary" style="display:inline-block;text-decoration:none">فتح الرابط ↗</a>
+      <a href="${externalUrl}" target="_blank" class="btn-primary" style="display:inline-block;text-decoration:none">Open Link ↗</a>
     </div>`;
   } else if (fileData) {
     playerHTML = `<div style="text-align:center;padding:30px">
       <div style="font-size:3rem;margin-bottom:12px">📎</div>
-      <a href="${fileData}" download="${fileName}" class="btn-primary" style="display:inline-block;text-decoration:none">⬇ تحميل ${fileName}</a>
+      <a href="${fileData}" download="${fileName}" class="btn-primary" style="display:inline-block;text-decoration:none">⬇ Download ${fileName}</a>
     </div>`;
   }
 
@@ -1992,7 +2000,7 @@ function openCreateCourse(preSubject = '') {
         style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:8px;width:100%;color:var(--text-primary)">
       <div id="cc-cover-preview" style="margin-top:8px"></div>
     </div>
-    <button class="btn-primary btn-full" onclick="submitCreateCourse()">✅ Create الcourses</button>
+    <button class="btn-primary btn-full" onclick="submitCreateCourse()">✅ Create Course</button>
   `, 'Create New Course');
 }
 
@@ -2015,7 +2023,7 @@ async function submitCreateCourse() {
   try {
     await API.post('/api/features/courses', { subject, title, description: desc, coverImage: window._ccCover || '' });
     window._ccCover = null;
-    Toast.success('تم Create الcourses! 🎉');
+    Toast.success('Course created! 🎉');
     Modal.close();
     openSubject(subject);
   } catch (err) { Toast.error(err.message); }
@@ -2077,7 +2085,7 @@ function openAddLesson(courseId) {
           ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
           ondrop="alFileDrop(event)">
           <div id="al-drop-text"><div style="font-size:2rem;margin-bottom:6px">📁</div>
-            <div style="font-weight:600;font-size:0.85rem">اضغط أو اسحب File هنا</div>
+            <div style="font-weight:600;font-size:0.85rem">Click or drag file here</div>
             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">Video · PDF · Images · Files · Max 150MB</div>
           </div>
         </div>
@@ -2128,7 +2136,7 @@ function alProcessFile(file) {
   document.getElementById('al-drop-text').innerHTML = `
     <div style="font-size:1.8rem;margin-bottom:6px">📎</div>
     <div style="font-weight:600;font-size:0.82rem;color:var(--accent)">${file.name}</div>
-    <div style="font-size:0.7rem;color:var(--text-muted)">${sizeLabel} · اضغط للتغيير</div>`;
+    <div style="font-size:0.7rem;color:var(--text-muted)">${sizeLabel} · click to change</div>`;
   let p = 0;
   const iv = setInterval(() => { p = Math.min(p+3, 90); if(bar) bar.style.width=p+'%'; }, 80);
   const reader = new FileReader();

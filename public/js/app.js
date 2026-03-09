@@ -219,7 +219,6 @@ document.getElementById('sidebar-avatar').addEventListener('click', () => { if (
 // ═══════════════════════════════════════════════════════
 async function renderPage(page) {
   const content = document.getElementById('main-content');
-  // Show skeleton immediately — feels much faster
   content.innerHTML = `
     <div class="skeleton-wrap fade-in">
       <div class="skeleton skeleton-title"></div>
@@ -228,29 +227,34 @@ async function renderPage(page) {
         ${[1,2,3].map(()=>`<div class="skeleton skeleton-card"></div>`).join('')}
       </div>
     </div>`;
-  switch (page) {
-    case 'dashboard':     await renderDashboard(); break;
-    case 'leaderboard':   await renderLeaderboard(); break;
-    case 'challenges':    await renderChallenges(); break;
-    case 'projects':      await renderProjects(); break;
-    case 'resources':     await renderResources(); break;
-    case 'chat':          renderChat(); break;
-    case 'admin':         await renderAdmin(); break;
-    case 'announcements': await renderAnnouncements(); break;
-    case 'events':        await renderEvents(); break;
-    case 'learning':      await renderLearning(); break;
-    case 'analytics':     await renderAnalytics(); break;
-    case 'polls':         await renderPolls(); break;
-    case 'blogs':         await renderBlogs(); break;
-    case 'notifications': await renderNotifications(); break;
-    case 'tasks':         await renderTasks(); break;
-    case 'teams':         await renderTeams(); break;
-    case 'shop':          await renderShop(); break;
-    case 'snippets':      await renderSnippets(); break;
-    case 'courses':       await renderCourses(); break;
-    case 'videos':        await renderVideos(); break;
-    case 'dms':           await renderDMs(); break;
-    default: content.innerHTML = `<div class="empty-state"><div class="empty-icon">◻</div><div class="empty-title">Page not found</div></div>`;
+  try {
+    switch (page) {
+      case 'dashboard':     await renderDashboard(); break;
+      case 'leaderboard':   await renderLeaderboard(); break;
+      case 'challenges':    await renderChallenges(); break;
+      case 'projects':      await renderProjects(); break;
+      case 'resources':     await renderResources(); break;
+      case 'chat':          renderChat(); break;
+      case 'admin':         await renderAdmin(); break;
+      case 'announcements': await renderAnnouncements(); break;
+      case 'events':        await renderEvents(); break;
+      case 'learning':      await renderLearning(); break;
+      case 'analytics':     await renderAnalytics(); break;
+      case 'polls':         await renderPolls(); break;
+      case 'blogs':         await renderBlogs(); break;
+      case 'notifications': await renderNotifications(); break;
+      case 'tasks':         await renderTasks(); break;
+      case 'teams':         await renderTeams(); break;
+      case 'shop':          await renderShop(); break;
+      case 'snippets':      await renderSnippets(); break;
+      case 'courses':       await renderCourses(); break;
+      case 'videos':        await renderVideos(); break;
+      case 'dms':           await renderDMs(); break;
+      default: content.innerHTML = `<div class="empty-state"><div class="empty-icon">◻</div><div class="empty-title">Page not found</div></div>`;
+    }
+  } catch(err) {
+    console.error('renderPage error on [' + page + ']:', err);
+    content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Error loading page</div><div class="empty-sub" style="color:var(--error);font-size:0.75rem;margin-top:8px">${err.message}</div></div>`;
   }
 }
 
