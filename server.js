@@ -90,7 +90,15 @@ app.use('/api/users',      rateLimit(60, 60000), require('./routes/users'));
 app.use('/api/chat',       rateLimit(60, 60000), require('./routes/chat'));
 app.use('/api/features',   rateLimit(60, 60000), require('./routes/features'));
 
-app.get('/health', (req, res) => res.json({ status: 'ok', uptime: Math.floor(process.uptime()) }));
+// ─── Health check — Railway pings this to verify server is alive ──
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', uptime: Math.floor(process.uptime()) }));
+app.get('/', (req, res, next) => {
+  // Let health checkers through quickly
+  if (req.headers['user-agent']?.includes('Railway') || req.headers['x-railway-request-id']) {
+    return res.status(200).send('OK');
+  }
+  next();
+});
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // ─── Socket.io ────────────────────────────────────────────
@@ -163,7 +171,24 @@ io.on('connection', async (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`\n🚀 IT Team Platform v2.1 — http://localhost:${PORT}`);
+
+// Railway requires binding to 0.0.0.0
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n🚀 IT Team Platform v2.1 — port ${PORT}`);
   console.log(`📦 ${process.env.NODE_ENV || 'development'} mode\n`);
 });
+
+// ─── Graceful shutdown (Railway sends SIGTERM before killing) ──
+function gracefulShutdown(signal) {
+  console.log(`\n${signal} received — shutting down gracefully`);
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+  // Force exit after 10s if hung
+  setTimeout(() => { console.error('Forced exit'); process.exit(1); }, 10000);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+process.on('uncaughtException',  (err) => { console.error('Uncaught:', err.message); });
+process.on('unhandledRejection', (err) => { console.error('Unhandled:', err?.message); });
