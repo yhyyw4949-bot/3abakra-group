@@ -246,9 +246,51 @@ const uploadedFileSchema = new mongoose.Schema({
 uploadedFileSchema.index({ section: 1, createdAt: -1 });
 const UploadedFile = mongoose.model('UploadedFile', uploadedFileSchema);
 
+
+// ─── Course ───────────────────────────────────────────────
+const COURSE_SUBJECTS = [
+  'arabic','chemistry','physics','math-b','math-a',
+  'history','data-science','python','english','biology','engineering'
+];
+
+const courseLessonSchema = new mongoose.Schema({
+  title:       { type: String, required: true },
+  description: { type: String, default: '' },
+  type:        { type: String, enum: ['video','pdf','doc','image','link','other'], default: 'video' },
+  fileData:    { type: String, default: '' },
+  fileName:    { type: String, default: '' },
+  fileSize:    { type: Number, default: 0 },
+  fileType:    { type: String, default: '' },
+  externalUrl: { type: String, default: '' },
+  duration:    { type: String, default: '' },
+  order:       { type: Number, default: 0 },
+  views:       { type: Number, default: 0 },
+  createdAt:   { type: Date, default: Date.now }
+});
+
+const courseSchema = new mongoose.Schema({
+  subject:     { type: String, required: true, enum: COURSE_SUBJECTS },
+  title:       { type: String, required: true },
+  description: { type: String, default: '' },
+  coverImage:  { type: String, default: '' },
+  author:      { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  lessons:     [courseLessonSchema],
+  enrolled:    [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  completedLessons: [{
+    user:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    lesson:  { type: mongoose.Schema.Types.ObjectId },
+    doneAt:  { type: Date, default: Date.now }
+  }],
+  published:   { type: Boolean, default: true },
+  createdAt:   { type: Date, default: Date.now }
+});
+courseSchema.index({ subject: 1, createdAt: -1 });
+const Course = mongoose.model('Course', courseSchema);
+
 module.exports = {
   Announcement, Event, LearningPath, Poll, Blog,
   DM, Notification, Mission, UserMission, Team,
   ShopItem, Snippet, Task, Follow,
-  VideoLesson, UploadedFile
+  VideoLesson, UploadedFile,
+  Course, COURSE_SUBJECTS
 };

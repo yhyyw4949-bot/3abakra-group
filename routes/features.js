@@ -7,7 +7,8 @@ const {
   Announcement, Event, LearningPath, Poll, Blog,
   DM, Notification, Mission, UserMission, Team,
   ShopItem, Snippet, Task, Follow,
-  VideoLesson, UploadedFile
+  VideoLesson, UploadedFile,
+  Course, COURSE_SUBJECTS
 } = require('../models/newModels');
 
 // ═══════════════════════════════════════════════
@@ -901,3 +902,152 @@ router.delete('/blogs/:id/comment/:commentId', requireAdmin, async (req, res) =>
 
 module.exports = router;
 module.exports.createNotification = createNotification;
+
+// ═══════════════════════════════════════════════
+//  COURSES
+// ═══════════════════════════════════════════════
+
+// GET all subjects info + course counts
+router.get('/courses/subjects', async (req, res) => {
+  try {
+    const counts = await Course.aggregate([
+      { $group: { _id: '$subject', count: { $sum: 1 }, lessons: { $sum: { $size: '$lessons' } } } }
+    ]);
+    const map = {};
+    counts.forEach(c => { map[c._id] = { courses: c.count, lessons: c.lessons }; });
+    const subjects = COURSE_SUBJECTS.map(s => ({ subject: s, ...( map[s] || { courses: 0, lessons: 0 }) }));
+    res.json(subjects);
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// GET courses by subject
+router.get('/courses/:subject', async (req, res) => {
+  try {
+    if (!COURSE_SUBJECTS.includes(req.params.subject))
+      return res.status(400).json({ error: 'Invalid subject' });
+    const courses = await Course.find({ subject: req.params.subject, published: true })
+      .populate('author', 'username avatar')
+      .select('-lessons.fileData') // don't send file data in list
+      .sort({ createdAt: -1 });
+    res.json(courses);
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// GET single course with lessons (no fileData)
+router.get('/courses/:subject/:id', requireAuth, async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id)
+      .populate('author', 'username avatar');
+    if (!course) return res.status(404).json({ error: 'Not found' });
+    // Send lessons without file data
+    const lessons = course.lessons.map(l => ({
+      _id: l._id, title: l.title, description: l.description,
+      type: l.type, fileName: l.fileName, fileSize: l.fileSize,
+      fileType: l.fileType, externalUrl: l.externalUrl,
+      duration: l.duration, order: l.order, views: l.views, createdAt: l.createdAt
+    }));
+    // Get user's completed lessons
+    const uid = req.session.userId;
+    const completed = course.completedLessons.filter(c => c.user.toString() === uid).map(c => c.lesson.toString());
+    res.json({ ...course.toObject(), lessons, completedLessons: completed });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// GET lesson file data (only when opening lesson)
+router.get('/courses/lesson/:courseId/:lessonId/file', requireAuth, async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.courseId).select('lessons');
+    if (!course) return res.status(404).json({ error: 'Not found' });
+    const lesson = course.lessons.id(req.params.lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
+    // Increment view
+    lesson.views = (lesson.views || 0) + 1;
+    await course.save();
+    res.json({ fileData: lesson.fileData, fileName: lesson.fileName, fileType: lesson.fileType, type: lesson.type, externalUrl: lesson.externalUrl });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// POST create course — admin only
+router.post('/courses', requireAdmin, async (req, res) => {
+  try {
+    const { subject, title, description, coverImage } = req.body;
+    if (!subject || !title) return res.status(400).json({ error: 'Subject and title required' });
+    if (!COURSE_SUBJECTS.includes(subject)) return res.status(400).json({ error: 'Invalid subject' });
+    const course = await Course.create({ subject, title, description, coverImage, author: req.session.userId });
+    res.json({ success: true, course });
+  } catch (err) { res.status(500).json({ error: 'Failed to create course' }); }
+});
+
+// PUT update course info — admin only
+router.put('/courses/:id', requireAdmin, async (req, res) => {
+  try {
+    const { title, description, coverImage, published } = req.body;
+    const course = await Course.findByIdAndUpdate(req.params.id, { title, description, coverImage, published }, { new: true });
+    res.json({ success: true, course });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// DELETE course — admin only
+router.delete('/courses/:id', requireAdmin, async (req, res) => {
+  try {
+    await Course.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// POST add lesson to course — admin only
+router.post('/courses/:id/lessons', requireAdmin, async (req, res) => {
+  try {
+    const { title, description, type, fileData, fileName, fileSize, fileType, externalUrl, duration } = req.body;
+    if (!title) return res.status(400).json({ error: 'Title required' });
+    if (fileSize > 150 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 150MB)' });
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    course.lessons.push({ title, description, type: type||'other', fileData, fileName, fileSize, fileType, externalUrl, duration, order: course.lessons.length });
+    await course.save();
+    const lesson = course.lessons[course.lessons.length - 1];
+    res.json({ success: true, lesson: { _id: lesson._id, title: lesson.title, description: lesson.description, type: lesson.type, fileName: lesson.fileName, duration: lesson.duration, order: lesson.order } });
+  } catch (err) { res.status(500).json({ error: 'Failed to add lesson' }); }
+});
+
+// DELETE lesson — admin only
+router.delete('/courses/:id/lessons/:lessonId', requireAdmin, async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ error: 'Not found' });
+    course.lessons.pull({ _id: req.params.lessonId });
+    await course.save();
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// POST mark lesson complete
+router.post('/courses/:id/lessons/:lessonId/complete', requireAuth, async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ error: 'Not found' });
+    const uid = req.session.userId;
+    const already = course.completedLessons.some(c => c.user.toString() === uid && c.lesson.toString() === req.params.lessonId);
+    if (!already) {
+      course.completedLessons.push({ user: uid, lesson: req.params.lessonId });
+      await course.save();
+      // Award 15 XP per lesson
+      const user = await require('../models/User').findById(uid);
+      if (user) await user.addXP(15);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// POST enroll in course
+router.post('/courses/:id/enroll', requireAuth, async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ error: 'Not found' });
+    const uid = req.session.userId;
+    if (!course.enrolled.includes(uid)) course.enrolled.push(uid);
+    await course.save();
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+

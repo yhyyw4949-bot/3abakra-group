@@ -1,5 +1,5 @@
 /**
- * IT Team Platform v2.1 — Complete App.js (Performance Optimized)
+ * 3abakra Community v2.1 — Complete App.js (Performance Optimized)
  */
 'use strict';
 
@@ -247,6 +247,7 @@ async function renderPage(page) {
     case 'teams':         await renderTeams(); break;
     case 'shop':          await renderShop(); break;
     case 'snippets':      await renderSnippets(); break;
+    case 'courses':       await renderCourses(); break;
     case 'videos':        await renderVideos(); break;
     case 'dms':           await renderDMs(); break;
     default: content.innerHTML = `<div class="empty-state"><div class="empty-icon">◻</div><div class="empty-title">Page not found</div></div>`;
@@ -295,7 +296,7 @@ async function renderDashboard() {
   <div class="page-header fade-in">
     <div>
       <div class="page-title">Welcome back, <span class="text-accent">${u.username}</span></div>
-      <div class="page-subtitle">مرحباً بك في جروب العباقرة · Here's your community overview</div>
+      <div class="page-subtitle">Welcome to 3abakra Community</div>
     </div>
   </div>
   <div class="dashboard-grid fade-in">
@@ -389,21 +390,55 @@ async function renderDashboard() {
 function openEditProfile() {
   const u = State.user;
   Modal.open(`
-    <div class="form-group"><label>Bio</label><textarea id="edit-bio" placeholder="Tell the team about yourself...">${u.bio||''}</textarea></div>
+    <!-- Avatar Upload -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+      <div id="avatar-preview" style="width:80px;height:80px;border-radius:50%;background:var(--bg-elevated);border:2px solid rgba(201,168,76,0.4);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-family:'Cinzel',serif;color:var(--accent);cursor:pointer" onclick="document.getElementById('avatar-file-input').click()">
+        ${u.avatar ? `<img src="${u.avatar}" style="width:100%;height:100%;object-fit:cover">` : u.username[0].toUpperCase()}
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:0.78rem;color:var(--accent);font-weight:600">صورة الملف الشخصي</div>
+        <div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px">اضغط على الصورة لتغييرها</div>
+      </div>
+      <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="profileAvatarSelect(this)">
+      <button class="btn-secondary" style="font-size:0.72rem;padding:5px 14px" onclick="document.getElementById('avatar-file-input').click()">📷 تغيير الصورة</button>
+    </div>
+    <div class="form-group"><label>Bio</label><textarea id="edit-bio" placeholder="عرّف بنفسك للفريق...">${u.bio||''}</textarea></div>
     <div class="form-group"><label>GitHub Username</label><input type="text" id="edit-github" value="${u.github||''}" placeholder="yourusername"></div>
-    <div class="form-group"><label>Avatar URL</label><input type="text" id="edit-avatar" value="${u.avatar||''}" placeholder="https://..."></div>
-    <button class="btn-primary btn-full" style="margin-top:12px" onclick="saveProfile()">Save Changes</button>
-  `, 'Edit Profile');
+    <button class="btn-primary btn-full" style="margin-top:12px" onclick="saveProfile()">💾 حفظ التغييرات</button>
+  `, 'تعديل الملف الشخصي');
+}
+
+function profileAvatarSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { Toast.error('الصورة كبيرة جداً (الحد 5MB)'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    window._newAvatar = e.target.result;
+    const preview = document.getElementById('avatar-preview');
+    if (preview) preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+    Toast.info('تم اختيار الصورة — اضغط حفظ لتطبيقها');
+  };
+  reader.readAsDataURL(file);
 }
 
 async function saveProfile() {
-  const bio = document.getElementById('edit-bio').value;
+  const bio    = document.getElementById('edit-bio').value;
   const github = document.getElementById('edit-github').value;
-  const avatar = document.getElementById('edit-avatar').value;
+  const avatar = window._newAvatar || State.user.avatar || '';
   try {
     const data = await API.put('/api/auth/profile', { bio, github, avatar });
     State.user = { ...State.user, ...data.user };
-    updateSidebarUser(); Modal.close(); Toast.success('Profile updated!'); renderPage('dashboard');
+    window._newAvatar = null;
+    // Update sidebar avatar immediately
+    const sidebarAvatar = document.getElementById('sidebar-avatar');
+    if (sidebarAvatar) {
+      sidebarAvatar.innerHTML = avatar ? `<img src="${avatar}" alt="${State.user.username}">` : State.user.username[0].toUpperCase();
+    }
+    updateSidebarUser();
+    Modal.close();
+    Toast.success('تم تحديث الملف الشخصي! ✅');
+    renderPage('dashboard');
   } catch (err) { Toast.error(err.message); }
 }
 
@@ -675,7 +710,7 @@ function renderChat() {
       <div class="chat-header">
         <div class="chat-header-dot"></div>
         <span class="chat-room-name"># general</span>
-        <span class="chat-room-desc">Team general discussion</span>
+        <span class="chat-room-desc">General discussion</span>
         ${State.user?.role === 'admin' ? `<button class="btn-danger" style="margin-left:auto;font-size:0.72rem;padding:4px 10px" onclick="clearAllChat()">🗑 Clear Chat</button>` : ''}
       </div>
       <div class="chat-messages" id="chat-messages"><div class="loading"><div class="spinner"></div></div></div>

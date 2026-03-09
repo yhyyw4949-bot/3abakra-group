@@ -1,5 +1,5 @@
 /**
- * IT Team Platform v2 — New Features JavaScript
+ * 3abakra Community Platform — Features JavaScript
  * Add this file as /public/js/newPages.js
  * Include it in index.html after app.js
  */
@@ -1722,3 +1722,460 @@ const _origRenderAnnouncements = typeof renderAnnouncements === 'function' ? ren
 
 // Inject "Admin Files" tab into admin panel
 const _origLoadAdminSection = typeof loadAdminSection === 'function' ? loadAdminSection : null;
+
+// ═══════════════════════════════════════════════════════
+//  COURSES PAGE
+// ═══════════════════════════════════════════════════════
+const COURSE_META = {
+  'arabic':       { name: 'Arabic',       icon: '📜', color: '#c9a84c', eng: 'Arabic' },
+  'chemistry':    { name: 'Chemistry',    icon: '⚗️',  color: '#7dd87d', eng: 'Chemistry' },
+  'physics':      { name: 'Physics',      icon: '⚡',  color: '#60b4ff', eng: 'Physics' },
+  'math-b':       { name: 'Math B',       icon: '📐',  color: '#ff9f60', eng: 'Math B' },
+  'math-a':       { name: 'Math A',       icon: '📊',  color: '#ff6b9d', eng: 'Math A' },
+  'history':      { name: 'History',      icon: '🏛️',  color: '#d4a574', eng: 'History' },
+  'data-science': { name: 'Data Science', icon: '📈',  color: '#a78bfa', eng: 'Data Science' },
+  'python':       { name: 'Python',       icon: '🐍',  color: '#4ec9b0', eng: 'Python' },
+  'english':      { name: 'English',      icon: '🌐',  color: '#60cdff', eng: 'English' },
+  'biology':      { name: 'Biology',      icon: '🧬',  color: '#73d997', eng: 'Biology' },
+  'engineering':  { name: 'Engineering',  icon: '⚙️',  color: '#f0b84b', eng: 'Engineering' },
+};
+
+let coursesCurrentSubject = null;
+let coursesCurrentCourse  = null;
+
+async function renderCourses() {
+  const content = document.getElementById('main-content');
+  const isAdmin = State.user?.role === 'admin';
+
+  // Show subjects grid
+  let subjects = [];
+  try { subjects = await API.get('/api/features/courses/subjects'); } catch {}
+
+  content.innerHTML = `
+  <div class="page-header fade-in">
+    <div>
+      <div class="page-title">📖 الكورسات</div>
+      <div class="page-subtitle">اختر المادة التي تريد دراستها</div>
+    </div>
+    ${isAdmin ? `<button class="btn-primary" onclick="openCreateCourse()">+ إضافة كورس</button>` : ''}
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px" class="fade-in" id="subjects-grid">
+    ${subjects.map(s => {
+      const m = COURSE_META[s.subject] || { name: s.subject, icon: '📚', color: '#c9a84c', eng: s.subject };
+      return `
+      <div class="subject-card" onclick="openSubject('${s.subject}')" style="--subj-color:${m.color}">
+        <div class="subject-icon">${m.icon}</div>
+        <div class="subject-name-en" style="font-size:1rem;margin-bottom:6px">${m.name}</div>
+        <div class="subject-stats">
+          <span>${s.courses} كورس</span>
+          <span>${s.lessons} درس</span>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+async function openSubject(subject) {
+  coursesCurrentSubject = subject;
+  const m = COURSE_META[subject];
+  const isAdmin = State.user?.role === 'admin';
+  const content = document.getElementById('main-content');
+
+  content.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  let courses = [];
+  try { courses = await API.get(`/api/features/courses/${subject}`); } catch {}
+
+  content.innerHTML = `
+  <div class="page-header fade-in">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="btn-secondary" style="padding:6px 12px" onclick="renderCourses()">← رجوع</button>
+      <div>
+        <div class="page-title">${m.icon} ${m.name}</div>
+        <div class="page-subtitle">${m.eng} · ${courses.length} كورس متاح</div>
+      </div>
+    </div>
+    ${isAdmin ? `<button class="btn-primary" onclick="openCreateCourse('${subject}')">+ إضافة كورس</button>` : ''}
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px" class="fade-in">
+    ${courses.length === 0 ? `
+    <div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">${m.icon}</div>
+      <div class="empty-title">لا يوجد كورسات بعد</div>
+      <div class="empty-sub">${isAdmin ? 'أضف أول كورس الآن!' : 'قريباً...'}</div>
+      ${isAdmin ? `<button class="btn-primary" style="margin-top:16px" onclick="openCreateCourse('${subject}')">+ إضافة كورس</button>` : ''}
+    </div>` :
+    courses.map(c => renderCourseCard(c, isAdmin)).join('')}
+  </div>`;
+}
+
+function renderCourseCard(c, isAdmin) {
+  const m = COURSE_META[c.subject] || {};
+  const lessonsCount = c.lessons?.length || 0;
+  return `
+  <div class="card course-card" style="padding:0;overflow:hidden;cursor:pointer" onclick="openCourse('${c.subject}','${c._id}')">
+    <div style="height:120px;background:linear-gradient(135deg,rgba(${hexToRgb(m.color||'#c9a84c')},0.2),rgba(0,0,0,0.5));display:flex;align-items:center;justify-content:center;position:relative">
+      ${c.coverImage ? `<img src="${c.coverImage}" style="width:100%;height:100%;object-fit:cover;opacity:0.7">` : ''}
+      <div style="position:absolute;font-size:3rem;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">${m.icon||'📚'}</div>
+      ${isAdmin ? `
+      <div style="position:absolute;top:8px;right:8px;display:flex;gap:4px" onclick="event.stopPropagation()">
+        <button class="btn-secondary" style="font-size:0.65rem;padding:3px 7px" onclick="openEditCourse('${c._id}','${c.subject}','${c.title.replace(/'/g,"\\'")}','${(c.description||'').replace(/'/g,"\\'")}')">✏️</button>
+        <button class="btn-danger" style="font-size:0.65rem;padding:3px 6px" onclick="deleteCourse('${c._id}','${c.subject}')">🗑</button>
+      </div>` : ''}
+    </div>
+    <div style="padding:14px">
+      <div style="font-family:'Cinzel',serif;font-weight:700;font-size:0.92rem;margin-bottom:6px;color:var(--text-primary)">${c.title}</div>
+      ${c.description ? `<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">${c.description.slice(0,80)}${c.description.length>80?'...':''}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:0.72rem;color:var(--accent)">📚 ${lessonsCount} درس</span>
+        <span style="font-size:0.7rem;color:var(--text-muted)">by ${c.author?.username||'Admin'}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `${r},${g},${b}`;
+}
+
+async function openCourse(subject, courseId) {
+  coursesCurrentCourse = courseId;
+  const content = document.getElementById('main-content');
+  const isAdmin = State.user?.role === 'admin';
+  const m = COURSE_META[subject] || {};
+
+  content.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  let course;
+  try { course = await API.get(`/api/features/courses/${subject}/${courseId}`); }
+  catch { Toast.error('فشل تحميل الكورس'); return; }
+
+  const completed = course.completedLessons || [];
+  const progress = course.lessons.length > 0 ? Math.round(completed.length / course.lessons.length * 100) : 0;
+
+  content.innerHTML = `
+  <div class="page-header fade-in">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="btn-secondary" style="padding:6px 12px" onclick="openSubject('${subject}')">← رجوع</button>
+      <div>
+        <div class="page-title">${m.icon} ${course.title}</div>
+        <div class="page-subtitle">${m.name} · ${course.lessons.length} درس</div>
+      </div>
+    </div>
+    ${isAdmin ? `<button class="btn-primary" onclick="openAddLesson('${courseId}')">+ إضافة درس</button>` : ''}
+  </div>
+
+  ${course.description ? `<div class="card fade-in" style="margin-bottom:16px;padding:14px 18px"><p style="color:var(--text-secondary);font-size:0.85rem;line-height:1.8">${course.description}</p></div>` : ''}
+
+  <!-- Progress bar -->
+  ${course.lessons.length > 0 ? `
+  <div class="card fade-in" style="margin-bottom:16px;padding:14px 18px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:0.8rem;color:var(--text-secondary)">تقدمك في الكورس</span>
+      <span style="font-size:0.8rem;color:var(--accent);font-weight:700">${progress}% · ${completed.length}/${course.lessons.length} درس</span>
+    </div>
+    <div class="xp-bar-wrap"><div class="xp-bar-fill" style="width:0%" id="course-progress-bar"></div></div>
+  </div>` : ''}
+
+  <!-- Lessons list -->
+  <div class="fade-in" id="lessons-list">
+    ${course.lessons.length === 0 ? `
+    <div class="empty-state">
+      <div class="empty-icon">📚</div>
+      <div class="empty-title">لا توجد دروس بعد</div>
+      ${isAdmin ? `<button class="btn-primary" style="margin-top:12px" onclick="openAddLesson('${courseId}')">+ إضافة درس</button>` : ''}
+    </div>` :
+    course.lessons.map((l, i) => renderLessonRow(l, i, completed.includes(l._id?.toString()), courseId, isAdmin)).join('')}
+  </div>`;
+
+  setTimeout(() => {
+    const bar = document.getElementById('course-progress-bar');
+    if (bar) bar.style.width = progress + '%';
+  }, 100);
+}
+
+function renderLessonRow(l, idx, isDone, courseId, isAdmin) {
+  const typeIcons = { video:'🎬', pdf:'📄', doc:'📝', image:'🖼️', link:'🔗', other:'📎' };
+  const icon = typeIcons[l.type] || '📎';
+  return `
+  <div class="card lesson-row ${isDone ? 'lesson-done' : ''}" id="lesson-row-${l._id}"
+    style="display:flex;align-items:center;gap:14px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all 0.2s"
+    onclick="openLesson('${courseId}','${l._id}','${l.type}','${l.title.replace(/'/g,"\\'")}')">
+    <div style="width:36px;height:36px;border-radius:50%;background:${isDone ? 'rgba(201,168,76,0.2)' : 'var(--bg-elevated)'};border:2px solid ${isDone ? 'var(--accent)' : 'var(--border-light)'};display:flex;align-items:center;justify-content:center;font-size:0.85rem;flex-shrink:0;transition:all 0.2s">
+      ${isDone ? '✓' : (idx + 1)}
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:0.88rem;margin-bottom:2px;color:${isDone ? 'var(--accent)' : 'var(--text-primary)'}">${icon} ${l.title}</div>
+      <div style="font-size:0.7rem;color:var(--text-muted)">
+        ${l.type.toUpperCase()}${l.duration ? ' · ' + l.duration : ''}${l.fileName ? ' · ' + l.fileName : ''}
+        ${l.views ? ' · 👁 ' + l.views : ''}
+      </div>
+    </div>
+    ${isDone ? `<span style="color:var(--accent);font-size:0.75rem;flex-shrink:0">✅ مكتمل</span>` : `<span style="color:var(--text-muted);font-size:0.72rem;flex-shrink:0">▶ ابدأ</span>`}
+    ${isAdmin ? `
+    <div onclick="event.stopPropagation()" style="flex-shrink:0">
+      <button class="btn-danger" style="font-size:0.65rem;padding:3px 7px" onclick="deleteLesson('${courseId}','${l._id}')">🗑</button>
+    </div>` : ''}
+  </div>`;
+}
+
+// ── Open lesson ───────────────────────────────────────────
+async function openLesson(courseId, lessonId, type, title) {
+  let lessonData;
+  try { lessonData = await API.get(`/api/features/courses/lesson/${courseId}/${lessonId}/file`); }
+  catch { Toast.error('فشل تحميل الدرس'); return; }
+
+  const { fileData, fileName, fileType, externalUrl } = lessonData;
+
+  let playerHTML = '';
+  if (type === 'video' && fileData) {
+    playerHTML = `<video controls style="width:100%;max-height:380px;border-radius:8px;background:#000" preload="metadata">
+      <source src="${fileData}" type="${fileType || 'video/mp4'}">
+    </video>`;
+  } else if (type === 'pdf' && fileData) {
+    playerHTML = `<iframe src="${fileData}" style="width:100%;height:500px;border:none;border-radius:8px"></iframe>`;
+  } else if (type === 'image' && fileData) {
+    playerHTML = `<img src="${fileData}" style="width:100%;max-height:500px;object-fit:contain;border-radius:8px">`;
+  } else if (type === 'link' && externalUrl) {
+    playerHTML = `<div style="text-align:center;padding:30px">
+      <div style="font-size:3rem;margin-bottom:12px">🔗</div>
+      <a href="${externalUrl}" target="_blank" class="btn-primary" style="display:inline-block;text-decoration:none">فتح الرابط ↗</a>
+    </div>`;
+  } else if (fileData) {
+    playerHTML = `<div style="text-align:center;padding:30px">
+      <div style="font-size:3rem;margin-bottom:12px">📎</div>
+      <a href="${fileData}" download="${fileName}" class="btn-primary" style="display:inline-block;text-decoration:none">⬇ تحميل ${fileName}</a>
+    </div>`;
+  }
+
+  Modal.open(`
+    ${playerHTML}
+    <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:0.8rem;color:var(--text-muted)">${type.toUpperCase()}${fileName ? ' · '+fileName : ''}</div>
+      <button class="btn-primary" style="font-size:0.78rem" onclick="markLessonDone('${courseId}','${lessonId}')">✅ تم الانتهاء (+15 XP)</button>
+    </div>
+  `, title);
+}
+
+async function markLessonDone(courseId, lessonId) {
+  try {
+    await API.post(`/api/features/courses/${courseId}/lessons/${lessonId}/complete`);
+    const row = document.getElementById(`lesson-row-${lessonId}`);
+    if (row) {
+      row.classList.add('lesson-done');
+      row.querySelector('div[style*="border-radius:50%"]').textContent = '✓';
+      row.querySelector('span[style*="text-muted"]').textContent = '✅ مكتمل';
+    }
+    showXPPopup(15);
+    Toast.success('أحسنت! +15 XP 🎉');
+    Modal.close();
+  } catch (err) { Toast.error(err.message); }
+}
+
+// ── Admin: Create course ──────────────────────────────────
+function openCreateCourse(preSubject = '') {
+  const subjectOptions = Object.entries(COURSE_META).map(([k,v]) =>
+    `<option value="${k}" ${k===preSubject?'selected':''}>${v.icon} ${v.name} (${v.eng})</option>`).join('');
+  Modal.open(`
+    <div class="form-group"><label>المادة</label>
+      <select id="cc-subject">${subjectOptions}</select>
+    </div>
+    <div class="form-group"><label>عنوان الكورس</label>
+      <input type="text" id="cc-title" placeholder="مثال: الكيمياء للثانوية - الفصل الأول">
+    </div>
+    <div class="form-group"><label>وصف الكورس (اختياري)</label>
+      <textarea id="cc-desc" placeholder="اكتب وصفاً للكورس..."></textarea>
+    </div>
+    <div class="form-group"><label>صورة الغلاف (اختياري)</label>
+      <input type="file" id="cc-cover" accept="image/*" onchange="ccCoverSelect(this)"
+        style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:8px;width:100%;color:var(--text-primary)">
+      <div id="cc-cover-preview" style="margin-top:8px"></div>
+    </div>
+    <button class="btn-primary btn-full" onclick="submitCreateCourse()">✅ إنشاء الكورس</button>
+  `, 'إنشاء كورس جديد');
+}
+
+function ccCoverSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    window._ccCover = e.target.result;
+    document.getElementById('cc-cover-preview').innerHTML = `<img src="${e.target.result}" style="width:100%;max-height:120px;object-fit:cover;border-radius:6px">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitCreateCourse() {
+  const subject = document.getElementById('cc-subject')?.value;
+  const title   = document.getElementById('cc-title')?.value?.trim();
+  const desc    = document.getElementById('cc-desc')?.value || '';
+  if (!title) { Toast.error('العنوان مطلوب'); return; }
+  try {
+    await API.post('/api/features/courses', { subject, title, description: desc, coverImage: window._ccCover || '' });
+    window._ccCover = null;
+    Toast.success('تم إنشاء الكورس! 🎉');
+    Modal.close();
+    openSubject(subject);
+  } catch (err) { Toast.error(err.message); }
+}
+
+async function deleteCourse(id, subject) {
+  if (!confirm('حذف هذا الكورس وكل دروسه؟')) return;
+  try { await API.delete(`/api/features/courses/${id}`); Toast.success('تم الحذف'); openSubject(subject); }
+  catch (err) { Toast.error(err.message); }
+}
+
+function openEditCourse(id, subject, title, desc) {
+  Modal.open(`
+    <div class="form-group"><label>العنوان</label>
+      <input type="text" id="ec-title" value="${title}">
+    </div>
+    <div class="form-group"><label>الوصف</label>
+      <textarea id="ec-desc">${desc}</textarea>
+    </div>
+    <button class="btn-primary btn-full" onclick="submitEditCourse('${id}','${subject}')">💾 حفظ</button>
+  `, 'تعديل الكورس');
+}
+
+async function submitEditCourse(id, subject) {
+  const title = document.getElementById('ec-title')?.value?.trim();
+  const desc  = document.getElementById('ec-desc')?.value || '';
+  if (!title) { Toast.error('العنوان مطلوب'); return; }
+  try {
+    await API.put(`/api/features/courses/${id}`, { title, description: desc });
+    Toast.success('تم التحديث');
+    Modal.close();
+    openCourse(subject, id);
+  } catch (err) { Toast.error(err.message); }
+}
+
+// ── Admin: Add lesson ─────────────────────────────────────
+function openAddLesson(courseId) {
+  Modal.open(`
+    <div class="form-group"><label>عنوان الدرس</label>
+      <input type="text" id="al-title" placeholder="مثال: الفصل الأول - الذرة والجزيء">
+    </div>
+    <div class="form-group"><label>وصف (اختياري)</label>
+      <textarea id="al-desc" placeholder="ملاحظات أو وصف للدرس..."></textarea>
+    </div>
+    <div class="form-group"><label>نوع المحتوى</label>
+      <select id="al-type" onchange="alTypeChange(this.value)">
+        <option value="video">🎬 فيديو</option>
+        <option value="pdf">📄 PDF</option>
+        <option value="doc">📝 ملف Word</option>
+        <option value="image">🖼️ صورة</option>
+        <option value="link">🔗 رابط خارجي</option>
+        <option value="other">📎 ملف آخر</option>
+      </select>
+    </div>
+    <div id="al-file-area">
+      <div class="form-group"><label>الملف</label>
+        <div id="al-drop" style="border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer"
+          onclick="document.getElementById('al-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+          ondrop="alFileDrop(event)">
+          <div id="al-drop-text"><div style="font-size:2rem;margin-bottom:6px">📁</div>
+            <div style="font-weight:600;font-size:0.85rem">اضغط أو اسحب الملف هنا</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">فيديو · PDF · صور · ملفات · حد أقصى 150MB</div>
+          </div>
+        </div>
+        <input type="file" id="al-file-input" style="display:none" onchange="alFileSelect(this)">
+      </div>
+    </div>
+    <div id="al-link-area" style="display:none">
+      <div class="form-group"><label>الرابط الخارجي</label>
+        <input type="url" id="al-url" placeholder="https://...">
+      </div>
+    </div>
+    <div class="form-group"><label>المدة (اختياري)</label>
+      <input type="text" id="al-duration" placeholder="مثال: 15:30">
+    </div>
+    <div id="al-progress" style="display:none;margin-bottom:10px">
+      <div style="height:5px;background:var(--bg-elevated);border-radius:3px;overflow:hidden">
+        <div id="al-prog-bar" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div>
+      </div>
+      <div id="al-prog-text" style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:center">جاري المعالجة...</div>
+    </div>
+    <button class="btn-primary btn-full" id="al-btn" onclick="submitAddLesson('${courseId}')" disabled style="opacity:0.5">+ إضافة الدرس</button>
+  `, 'إضافة درس جديد');
+}
+
+function alTypeChange(type) {
+  const fileArea = document.getElementById('al-file-area');
+  const linkArea = document.getElementById('al-link-area');
+  const btn = document.getElementById('al-btn');
+  if (type === 'link') {
+    fileArea.style.display = 'none';
+    linkArea.style.display = 'block';
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  } else {
+    fileArea.style.display = 'block';
+    linkArea.style.display = 'none';
+    if (btn && !window._alFile) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  }
+}
+function alFileDrop(e) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) alProcessFile(f); }
+function alFileSelect(input) { if (input.files[0]) alProcessFile(input.files[0]); }
+function alProcessFile(file) {
+  if (file.size > 150 * 1024 * 1024) { Toast.error('الملف كبير جداً (الحد 150MB)'); return; }
+  const prog = document.getElementById('al-progress');
+  const bar  = document.getElementById('al-prog-bar');
+  const txt  = document.getElementById('al-prog-text');
+  if (prog) prog.style.display = 'block';
+  const sizeLabel = file.size > 1024*1024 ? (file.size/1024/1024).toFixed(1)+' MB' : (file.size/1024).toFixed(0)+' KB';
+  document.getElementById('al-drop-text').innerHTML = `
+    <div style="font-size:1.8rem;margin-bottom:6px">📎</div>
+    <div style="font-weight:600;font-size:0.82rem;color:var(--accent)">${file.name}</div>
+    <div style="font-size:0.7rem;color:var(--text-muted)">${sizeLabel} · اضغط للتغيير</div>`;
+  let p = 0;
+  const iv = setInterval(() => { p = Math.min(p+3, 90); if(bar) bar.style.width=p+'%'; }, 80);
+  const reader = new FileReader();
+  reader.onload = e => {
+    clearInterval(iv);
+    if(bar) bar.style.width='100%';
+    if(txt) txt.textContent = '✅ جاهز للرفع!';
+    window._alFile = { data: e.target.result, name: file.name, type: file.type, size: file.size };
+    const btn = document.getElementById('al-btn');
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  };
+  reader.readAsDataURL(file);
+}
+async function submitAddLesson(courseId) {
+  const type = document.getElementById('al-type')?.value;
+  const title = document.getElementById('al-title')?.value?.trim();
+  if (!title) { Toast.error('العنوان مطلوب'); return; }
+  const f = window._alFile;
+  const url = document.getElementById('al-url')?.value || '';
+  if (type !== 'link' && !f) { Toast.error('يرجى اختيار ملف'); return; }
+  const btn = document.getElementById('al-btn');
+  if (btn) { btn.textContent = '⏳ جاري الرفع...'; btn.disabled = true; }
+  try {
+    await API.post(`/api/features/courses/${courseId}/lessons`, {
+      title, type,
+      description: document.getElementById('al-desc')?.value || '',
+      duration: document.getElementById('al-duration')?.value || '',
+      fileData: f?.data || '', fileName: f?.name || '', fileSize: f?.size || 0, fileType: f?.type || '',
+      externalUrl: url
+    });
+    window._alFile = null;
+    Toast.success('تم إضافة الدرس! ✅');
+    Modal.close();
+    const subj = coursesCurrentSubject;
+    openCourse(subj, courseId);
+  } catch (err) {
+    Toast.error(err.message);
+    if (btn) { btn.textContent = '+ إضافة الدرس'; btn.disabled = false; }
+  }
+}
+
+async function deleteLesson(courseId, lessonId) {
+  if (!confirm('حذف هذا الدرس؟')) return;
+  try {
+    await API.delete(`/api/features/courses/${courseId}/lessons/${lessonId}`);
+    document.getElementById(`lesson-row-${lessonId}`)?.remove();
+    Toast.success('تم حذف الدرس');
+  } catch (err) { Toast.error(err.message); }
+}
+

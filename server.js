@@ -27,7 +27,7 @@ const sessionMiddleware = session({
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/it-team-platform',
+    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/3abakra-platform',
     touchAfter: 24 * 3600,
     ttl: 7 * 24 * 60 * 60,
   }),
@@ -174,7 +174,7 @@ const PORT = process.env.PORT || 3000;
 
 // Railway requires binding to 0.0.0.0
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 IT Team Platform v2.1 — port ${PORT}`);
+  console.log(`\n🚀 3abakra Community v2.1 — port ${PORT}`);
   console.log(`📦 ${process.env.NODE_ENV || 'development'} mode\n`);
 });
 
