@@ -1754,10 +1754,10 @@ async function renderCourses() {
   content.innerHTML = `
   <div class="page-header fade-in">
     <div>
-      <div class="page-title">📖 الكورسات</div>
-      <div class="page-subtitle">اختر المادة التي تريد دراستها</div>
+      <div class="page-title">📖 Courses</div>
+      <div class="page-subtitle">Choose a subject to start learning</div>
     </div>
-    ${isAdmin ? `<button class="btn-primary" onclick="openCreateCourse()">+ إضافة كورس</button>` : ''}
+    ${isAdmin ? `<button class="btn-primary" onclick="openCreateCourse()">+ New Course</button>` : ''}
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px" class="fade-in" id="subjects-grid">
@@ -1768,8 +1768,8 @@ async function renderCourses() {
         <div class="subject-icon">${m.icon}</div>
         <div class="subject-name-en" style="font-size:1rem;margin-bottom:6px">${m.name}</div>
         <div class="subject-stats">
-          <span>${s.courses} كورس</span>
-          <span>${s.lessons} درس</span>
+          <span>${s.courses} courses</span>
+          <span>${s.lessons} lessons</span>
         </div>
       </div>`;
     }).join('')}
@@ -1789,22 +1789,22 @@ async function openSubject(subject) {
   content.innerHTML = `
   <div class="page-header fade-in">
     <div style="display:flex;align-items:center;gap:12px">
-      <button class="btn-secondary" style="padding:6px 12px" onclick="renderCourses()">← رجوع</button>
+      <button class="btn-secondary" style="padding:6px 12px" onclick="renderCourses()">← Back</button>
       <div>
         <div class="page-title">${m.icon} ${m.name}</div>
-        <div class="page-subtitle">${m.eng} · ${courses.length} كورس متاح</div>
+        <div class="page-subtitle">${m.eng} · ${courses.length} courses available</div>
       </div>
     </div>
-    ${isAdmin ? `<button class="btn-primary" onclick="openCreateCourse('${subject}')">+ إضافة كورس</button>` : ''}
+    ${isAdmin ? `<button class="btn-primary" onclick="openCreateCourse('${subject}')">+ New Course</button>` : ''}
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px" class="fade-in">
     ${courses.length === 0 ? `
     <div class="empty-state" style="grid-column:1/-1">
       <div class="empty-icon">${m.icon}</div>
-      <div class="empty-title">لا يوجد كورسات بعد</div>
-      <div class="empty-sub">${isAdmin ? 'أضف أول كورس الآن!' : 'قريباً...'}</div>
-      ${isAdmin ? `<button class="btn-primary" style="margin-top:16px" onclick="openCreateCourse('${subject}')">+ إضافة كورس</button>` : ''}
+      <div class="empty-title">No courses yet</div>
+      <div class="empty-sub">${isAdmin ? 'Add the first course now!' : 'Coming soon...'}</div>
+      ${isAdmin ? `<button class="btn-primary" style="margin-top:16px" onclick="openCreateCourse('${subject}')">+ New Course</button>` : ''}
     </div>` :
     courses.map(c => renderCourseCard(c, isAdmin)).join('')}
   </div>`;
@@ -1828,7 +1828,7 @@ function renderCourseCard(c, isAdmin) {
       <div style="font-family:'Cinzel',serif;font-weight:700;font-size:0.92rem;margin-bottom:6px;color:var(--text-primary)">${c.title}</div>
       ${c.description ? `<div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">${c.description.slice(0,80)}${c.description.length>80?'...':''}</div>` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:0.72rem;color:var(--accent)">📚 ${lessonsCount} درس</span>
+        <span style="font-size:0.72rem;color:var(--accent)">📚 ${lessonsCount} lessons</span>
         <span style="font-size:0.7rem;color:var(--text-muted)">by ${c.author?.username||'Admin'}</span>
       </div>
     </div>
@@ -1849,7 +1849,7 @@ async function openCourse(subject, courseId) {
   content.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   let course;
   try { course = await API.get(`/api/features/courses/${subject}/${courseId}`); }
-  catch { Toast.error('فشل تحميل الكورس'); return; }
+  catch { Toast.error('Failed to load course'); return; }
 
   const completed = course.completedLessons || [];
   const progress = course.lessons.length > 0 ? Math.round(completed.length / course.lessons.length * 100) : 0;
@@ -1857,13 +1857,13 @@ async function openCourse(subject, courseId) {
   content.innerHTML = `
   <div class="page-header fade-in">
     <div style="display:flex;align-items:center;gap:12px">
-      <button class="btn-secondary" style="padding:6px 12px" onclick="openSubject('${subject}')">← رجوع</button>
+      <button class="btn-secondary" style="padding:6px 12px" onclick="openSubject('${subject}')">← Back</button>
       <div>
         <div class="page-title">${m.icon} ${course.title}</div>
-        <div class="page-subtitle">${m.name} · ${course.lessons.length} درس</div>
+        <div class="page-subtitle">${m.name} · ${course.lessons.length} lessons</div>
       </div>
     </div>
-    ${isAdmin ? `<button class="btn-primary" onclick="openAddLesson('${courseId}')">+ إضافة درس</button>` : ''}
+    ${isAdmin ? `<button class="btn-primary" onclick="openAddLesson('${courseId}')">+ إضافة lessons</button>` : ''}
   </div>
 
   ${course.description ? `<div class="card fade-in" style="margin-bottom:16px;padding:14px 18px"><p style="color:var(--text-secondary);font-size:0.85rem;line-height:1.8">${course.description}</p></div>` : ''}
@@ -1872,8 +1872,8 @@ async function openCourse(subject, courseId) {
   ${course.lessons.length > 0 ? `
   <div class="card fade-in" style="margin-bottom:16px;padding:14px 18px">
     <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:0.8rem;color:var(--text-secondary)">تقدمك في الكورس</span>
-      <span style="font-size:0.8rem;color:var(--accent);font-weight:700">${progress}% · ${completed.length}/${course.lessons.length} درس</span>
+      <span style="font-size:0.8rem;color:var(--text-secondary)">Your Progress</span>
+      <span style="font-size:0.8rem;color:var(--accent);font-weight:700">${progress}% · ${completed.length}/${course.lessons.length} lessons</span>
     </div>
     <div class="xp-bar-wrap"><div class="xp-bar-fill" style="width:0%" id="course-progress-bar"></div></div>
   </div>` : ''}
@@ -1883,8 +1883,8 @@ async function openCourse(subject, courseId) {
     ${course.lessons.length === 0 ? `
     <div class="empty-state">
       <div class="empty-icon">📚</div>
-      <div class="empty-title">لا توجد دروس بعد</div>
-      ${isAdmin ? `<button class="btn-primary" style="margin-top:12px" onclick="openAddLesson('${courseId}')">+ إضافة درس</button>` : ''}
+      <div class="empty-title">No lessons yet</div>
+      ${isAdmin ? `<button class="btn-primary" style="margin-top:12px" onclick="openAddLesson('${courseId}')">+ إضافة lessons</button>` : ''}
     </div>` :
     course.lessons.map((l, i) => renderLessonRow(l, i, completed.includes(l._id?.toString()), courseId, isAdmin)).join('')}
   </div>`;
@@ -1912,7 +1912,7 @@ function renderLessonRow(l, idx, isDone, courseId, isAdmin) {
         ${l.views ? ' · 👁 ' + l.views : ''}
       </div>
     </div>
-    ${isDone ? `<span style="color:var(--accent);font-size:0.75rem;flex-shrink:0">✅ مكتمل</span>` : `<span style="color:var(--text-muted);font-size:0.72rem;flex-shrink:0">▶ ابدأ</span>`}
+    ${isDone ? `<span style="color:var(--accent);font-size:0.75rem;flex-shrink:0">✅ Done</span>` : `<span style="color:var(--text-muted);font-size:0.72rem;flex-shrink:0">▶ Start</span>`}
     ${isAdmin ? `
     <div onclick="event.stopPropagation()" style="flex-shrink:0">
       <button class="btn-danger" style="font-size:0.65rem;padding:3px 7px" onclick="deleteLesson('${courseId}','${l._id}')">🗑</button>
@@ -1924,7 +1924,7 @@ function renderLessonRow(l, idx, isDone, courseId, isAdmin) {
 async function openLesson(courseId, lessonId, type, title) {
   let lessonData;
   try { lessonData = await API.get(`/api/features/courses/lesson/${courseId}/${lessonId}/file`); }
-  catch { Toast.error('فشل تحميل الدرس'); return; }
+  catch { Toast.error('Failed to load lesson'); return; }
 
   const { fileData, fileName, fileType, externalUrl } = lessonData;
 
@@ -1953,7 +1953,7 @@ async function openLesson(courseId, lessonId, type, title) {
     ${playerHTML}
     <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
       <div style="font-size:0.8rem;color:var(--text-muted)">${type.toUpperCase()}${fileName ? ' · '+fileName : ''}</div>
-      <button class="btn-primary" style="font-size:0.78rem" onclick="markLessonDone('${courseId}','${lessonId}')">✅ تم الانتهاء (+15 XP)</button>
+      <button class="btn-primary" style="font-size:0.78rem" onclick="markLessonDone('${courseId}','${lessonId}')">✅ Mark Complete (+15 XP)</button>
     </div>
   `, title);
 }
@@ -1965,10 +1965,10 @@ async function markLessonDone(courseId, lessonId) {
     if (row) {
       row.classList.add('lesson-done');
       row.querySelector('div[style*="border-radius:50%"]').textContent = '✓';
-      row.querySelector('span[style*="text-muted"]').textContent = '✅ مكتمل';
+      row.querySelector('span[style*="text-muted"]').textContent = '✅ Done';
     }
     showXPPopup(15);
-    Toast.success('أحسنت! +15 XP 🎉');
+    Toast.success('Well done! +15 XP 🎉');
     Modal.close();
   } catch (err) { Toast.error(err.message); }
 }
@@ -1978,22 +1978,22 @@ function openCreateCourse(preSubject = '') {
   const subjectOptions = Object.entries(COURSE_META).map(([k,v]) =>
     `<option value="${k}" ${k===preSubject?'selected':''}>${v.icon} ${v.name} (${v.eng})</option>`).join('');
   Modal.open(`
-    <div class="form-group"><label>المادة</label>
+    <div class="form-group"><label>Subject</label>
       <select id="cc-subject">${subjectOptions}</select>
     </div>
-    <div class="form-group"><label>عنوان الكورس</label>
-      <input type="text" id="cc-title" placeholder="مثال: الكيمياء للثانوية - الفصل الأول">
+    <div class="form-group"><label>Course Title</label>
+      <input type="text" id="cc-title" placeholder="e.g. Chemistry - Chapter 1">
     </div>
-    <div class="form-group"><label>وصف الكورس (اختياري)</label>
-      <textarea id="cc-desc" placeholder="اكتب وصفاً للكورس..."></textarea>
+    <div class="form-group"><label>Course Description (optional)</label>
+      <textarea id="cc-desc" placeholder="Write a course description..."></textarea>
     </div>
-    <div class="form-group"><label>صورة الغلاف (اختياري)</label>
+    <div class="form-group"><label>Cover Image (optional)</label>
       <input type="file" id="cc-cover" accept="image/*" onchange="ccCoverSelect(this)"
         style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:8px;width:100%;color:var(--text-primary)">
       <div id="cc-cover-preview" style="margin-top:8px"></div>
     </div>
-    <button class="btn-primary btn-full" onclick="submitCreateCourse()">✅ إنشاء الكورس</button>
-  `, 'إنشاء كورس جديد');
+    <button class="btn-primary btn-full" onclick="submitCreateCourse()">✅ Create الcourses</button>
+  `, 'Create New Course');
 }
 
 function ccCoverSelect(input) {
@@ -2011,41 +2011,41 @@ async function submitCreateCourse() {
   const subject = document.getElementById('cc-subject')?.value;
   const title   = document.getElementById('cc-title')?.value?.trim();
   const desc    = document.getElementById('cc-desc')?.value || '';
-  if (!title) { Toast.error('العنوان مطلوب'); return; }
+  if (!title) { Toast.error('Title is required'); return; }
   try {
     await API.post('/api/features/courses', { subject, title, description: desc, coverImage: window._ccCover || '' });
     window._ccCover = null;
-    Toast.success('تم إنشاء الكورس! 🎉');
+    Toast.success('تم Create الcourses! 🎉');
     Modal.close();
     openSubject(subject);
   } catch (err) { Toast.error(err.message); }
 }
 
 async function deleteCourse(id, subject) {
-  if (!confirm('حذف هذا الكورس وكل دروسه؟')) return;
-  try { await API.delete(`/api/features/courses/${id}`); Toast.success('تم الحذف'); openSubject(subject); }
+  if (!confirm('Delete this course and all its lessons?')) return;
+  try { await API.delete(`/api/features/courses/${id}`); Toast.success('Deleted'); openSubject(subject); }
   catch (err) { Toast.error(err.message); }
 }
 
 function openEditCourse(id, subject, title, desc) {
   Modal.open(`
-    <div class="form-group"><label>العنوان</label>
+    <div class="form-group"><label>Title</label>
       <input type="text" id="ec-title" value="${title}">
     </div>
-    <div class="form-group"><label>الوصف</label>
+    <div class="form-group"><label>Description</label>
       <textarea id="ec-desc">${desc}</textarea>
     </div>
-    <button class="btn-primary btn-full" onclick="submitEditCourse('${id}','${subject}')">💾 حفظ</button>
-  `, 'تعديل الكورس');
+    <button class="btn-primary btn-full" onclick="submitEditCourse('${id}','${subject}')">💾 Save</button>
+  `, 'Edit Course');
 }
 
 async function submitEditCourse(id, subject) {
   const title = document.getElementById('ec-title')?.value?.trim();
   const desc  = document.getElementById('ec-desc')?.value || '';
-  if (!title) { Toast.error('العنوان مطلوب'); return; }
+  if (!title) { Toast.error('Title is required'); return; }
   try {
     await API.put(`/api/features/courses/${id}`, { title, description: desc });
-    Toast.success('تم التحديث');
+    Toast.success('Updated successfully');
     Modal.close();
     openCourse(subject, id);
   } catch (err) { Toast.error(err.message); }
@@ -2054,52 +2054,52 @@ async function submitEditCourse(id, subject) {
 // ── Admin: Add lesson ─────────────────────────────────────
 function openAddLesson(courseId) {
   Modal.open(`
-    <div class="form-group"><label>عنوان الدرس</label>
-      <input type="text" id="al-title" placeholder="مثال: الفصل الأول - الذرة والجزيء">
+    <div class="form-group"><label>Lesson Title</label>
+      <input type="text" id="al-title" placeholder="e.g. Chapter 1 - Introduction">
     </div>
-    <div class="form-group"><label>وصف (اختياري)</label>
-      <textarea id="al-desc" placeholder="ملاحظات أو وصف للدرس..."></textarea>
+    <div class="form-group"><label>Description (optional)</label>
+      <textarea id="al-desc" placeholder="Notes or description..."></textarea>
     </div>
-    <div class="form-group"><label>نوع المحتوى</label>
+    <div class="form-group"><label>Content Type</label>
       <select id="al-type" onchange="alTypeChange(this.value)">
-        <option value="video">🎬 فيديو</option>
+        <option value="video">🎬 Video</option>
         <option value="pdf">📄 PDF</option>
-        <option value="doc">📝 ملف Word</option>
-        <option value="image">🖼️ صورة</option>
-        <option value="link">🔗 رابط خارجي</option>
-        <option value="other">📎 ملف آخر</option>
+        <option value="doc">📝 Word File</option>
+        <option value="image">🖼️ Image</option>
+        <option value="link">🔗 External Link</option>
+        <option value="other">📎 Other File</option>
       </select>
     </div>
     <div id="al-file-area">
-      <div class="form-group"><label>الملف</label>
+      <div class="form-group"><label>File</label>
         <div id="al-drop" style="border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer"
           onclick="document.getElementById('al-file-input').click()"
           ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
           ondrop="alFileDrop(event)">
           <div id="al-drop-text"><div style="font-size:2rem;margin-bottom:6px">📁</div>
-            <div style="font-weight:600;font-size:0.85rem">اضغط أو اسحب الملف هنا</div>
-            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">فيديو · PDF · صور · ملفات · حد أقصى 150MB</div>
+            <div style="font-weight:600;font-size:0.85rem">اضغط أو اسحب File هنا</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">Video · PDF · Images · Files · Max 150MB</div>
           </div>
         </div>
         <input type="file" id="al-file-input" style="display:none" onchange="alFileSelect(this)">
       </div>
     </div>
     <div id="al-link-area" style="display:none">
-      <div class="form-group"><label>الرابط الخارجي</label>
+      <div class="form-group"><label>External URL</label>
         <input type="url" id="al-url" placeholder="https://...">
       </div>
     </div>
-    <div class="form-group"><label>المدة (اختياري)</label>
-      <input type="text" id="al-duration" placeholder="مثال: 15:30">
+    <div class="form-group"><label>Duration (optional)</label>
+      <input type="text" id="al-duration" placeholder="e.g. 15:30">
     </div>
     <div id="al-progress" style="display:none;margin-bottom:10px">
       <div style="height:5px;background:var(--bg-elevated);border-radius:3px;overflow:hidden">
         <div id="al-prog-bar" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div>
       </div>
-      <div id="al-prog-text" style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:center">جاري المعالجة...</div>
+      <div id="al-prog-text" style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:center">Processing...</div>
     </div>
-    <button class="btn-primary btn-full" id="al-btn" onclick="submitAddLesson('${courseId}')" disabled style="opacity:0.5">+ إضافة الدرس</button>
-  `, 'إضافة درس جديد');
+    <button class="btn-primary btn-full" id="al-btn" onclick="submitAddLesson('${courseId}')" disabled style="opacity:0.5">+ Add Lesson</button>
+  `, 'Add New Lesson');
 }
 
 function alTypeChange(type) {
@@ -2119,7 +2119,7 @@ function alTypeChange(type) {
 function alFileDrop(e) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) alProcessFile(f); }
 function alFileSelect(input) { if (input.files[0]) alProcessFile(input.files[0]); }
 function alProcessFile(file) {
-  if (file.size > 150 * 1024 * 1024) { Toast.error('الملف كبير جداً (الحد 150MB)'); return; }
+  if (file.size > 150 * 1024 * 1024) { Toast.error('File too large (max 150MB)'); return; }
   const prog = document.getElementById('al-progress');
   const bar  = document.getElementById('al-prog-bar');
   const txt  = document.getElementById('al-prog-text');
@@ -2135,7 +2135,7 @@ function alProcessFile(file) {
   reader.onload = e => {
     clearInterval(iv);
     if(bar) bar.style.width='100%';
-    if(txt) txt.textContent = '✅ جاهز للرفع!';
+    if(txt) txt.textContent = '✅ Ready to upload!';
     window._alFile = { data: e.target.result, name: file.name, type: file.type, size: file.size };
     const btn = document.getElementById('al-btn');
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
@@ -2145,12 +2145,12 @@ function alProcessFile(file) {
 async function submitAddLesson(courseId) {
   const type = document.getElementById('al-type')?.value;
   const title = document.getElementById('al-title')?.value?.trim();
-  if (!title) { Toast.error('العنوان مطلوب'); return; }
+  if (!title) { Toast.error('Title is required'); return; }
   const f = window._alFile;
   const url = document.getElementById('al-url')?.value || '';
-  if (type !== 'link' && !f) { Toast.error('يرجى اختيار ملف'); return; }
+  if (type !== 'link' && !f) { Toast.error('Please select a file'); return; }
   const btn = document.getElementById('al-btn');
-  if (btn) { btn.textContent = '⏳ جاري الرفع...'; btn.disabled = true; }
+  if (btn) { btn.textContent = '⏳ Uploading...'; btn.disabled = true; }
   try {
     await API.post(`/api/features/courses/${courseId}/lessons`, {
       title, type,
@@ -2160,22 +2160,22 @@ async function submitAddLesson(courseId) {
       externalUrl: url
     });
     window._alFile = null;
-    Toast.success('تم إضافة الدرس! ✅');
+    Toast.success('Lesson added! ✅');
     Modal.close();
     const subj = coursesCurrentSubject;
     openCourse(subj, courseId);
   } catch (err) {
     Toast.error(err.message);
-    if (btn) { btn.textContent = '+ إضافة الدرس'; btn.disabled = false; }
+    if (btn) { btn.textContent = '+ Add Lesson'; btn.disabled = false; }
   }
 }
 
 async function deleteLesson(courseId, lessonId) {
-  if (!confirm('حذف هذا الدرس؟')) return;
+  if (!confirm('Delete this lesson?')) return;
   try {
     await API.delete(`/api/features/courses/${courseId}/lessons/${lessonId}`);
     document.getElementById(`lesson-row-${lessonId}`)?.remove();
-    Toast.success('تم حذف الدرس');
+    Toast.success('Lesson deleted');
   } catch (err) { Toast.error(err.message); }
 }
 

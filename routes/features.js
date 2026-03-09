@@ -920,6 +920,20 @@ router.get('/courses/subjects', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
 
+// GET lesson file data (only when opening lesson)
+router.get('/courses/lesson/:courseId/:lessonId/file', requireAuth, async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.courseId).select('lessons');
+    if (!course) return res.status(404).json({ error: 'Not found' });
+    const lesson = course.lessons.id(req.params.lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
+    // Increment view
+    lesson.views = (lesson.views || 0) + 1;
+    await course.save();
+    res.json({ fileData: lesson.fileData, fileName: lesson.fileName, fileType: lesson.fileType, type: lesson.type, externalUrl: lesson.externalUrl });
+  } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
 // GET courses by subject
 router.get('/courses/:subject', async (req, res) => {
   try {
@@ -950,20 +964,6 @@ router.get('/courses/:subject/:id', requireAuth, async (req, res) => {
     const uid = req.session.userId;
     const completed = course.completedLessons.filter(c => c.user.toString() === uid).map(c => c.lesson.toString());
     res.json({ ...course.toObject(), lessons, completedLessons: completed });
-  } catch (err) { res.status(500).json({ error: 'Failed' }); }
-});
-
-// GET lesson file data (only when opening lesson)
-router.get('/courses/lesson/:courseId/:lessonId/file', requireAuth, async (req, res) => {
-  try {
-    const course = await Course.findById(req.params.courseId).select('lessons');
-    if (!course) return res.status(404).json({ error: 'Not found' });
-    const lesson = course.lessons.id(req.params.lessonId);
-    if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
-    // Increment view
-    lesson.views = (lesson.views || 0) + 1;
-    await course.save();
-    res.json({ fileData: lesson.fileData, fileName: lesson.fileName, fileType: lesson.fileType, type: lesson.type, externalUrl: lesson.externalUrl });
   } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
 
