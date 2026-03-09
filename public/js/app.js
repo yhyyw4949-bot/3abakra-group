@@ -295,7 +295,7 @@ async function renderDashboard() {
   <div class="page-header fade-in">
     <div>
       <div class="page-title">Welcome back, <span class="text-accent">${u.username}</span></div>
-      <div class="page-subtitle">Here's what's happening in your team today.</div>
+      <div class="page-subtitle">مرحباً بك في جروب العباقرة · Here's your community overview</div>
     </div>
   </div>
   <div class="dashboard-grid fade-in">
