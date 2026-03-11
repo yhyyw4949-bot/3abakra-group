@@ -2971,7 +2971,7 @@ function buildLobbyHTML() {
   <div class="fade-in" style="margin-top:24px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-family:'Cinzel',serif;font-size:0.85rem;color:var(--accent);letter-spacing:0.1em">OPEN ROOMS</div>
-      <button class="btn-secondary" style="font-size:0.7rem;padding:4px 10px" onclick="if(gameSocket)gameSocket.emit('get_rooms')">↻ Refresh</button>
+      <button class="btn-secondary" style="font-size:0.7rem;padding:4px 10px" onclick="gameSocket.emit('get_rooms')">↻ Refresh</button>
     </div>
     <div id="game-rooms-list">
       <div class="game-empty">No open rooms · Create one to invite a friend!</div>
