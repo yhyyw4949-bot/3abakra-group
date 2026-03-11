@@ -238,10 +238,8 @@ async function renderPage(page) {
       case 'admin':         await renderAdmin(); break;
       case 'announcements': await renderAnnouncements(); break;
       case 'events':        await renderEvents(); break;
-      case 'learning':      await renderLearning(); break;
       case 'analytics':     await renderAnalytics(); break;
       case 'polls':         await renderPolls(); break;
-      case 'blogs':         await renderBlogs(); break;
       case 'notifications': await renderNotifications(); break;
       case 'tasks':         await renderTasks(); break;
       case 'teams':         await renderTeams(); break;

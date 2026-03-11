@@ -248,7 +248,7 @@ const UploadedFile = mongoose.model('UploadedFile', uploadedFileSchema);
 
 
 module.exports = {
-  Announcement, Event, LearningPath, Poll, Blog,
+  Announcement, Event, Poll,
   DM, Notification, Mission, UserMission, Team,
   ShopItem, Snippet, Task, Follow,
   VideoLesson, UploadedFile

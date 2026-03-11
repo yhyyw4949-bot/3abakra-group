@@ -174,40 +174,6 @@ async function deleteEvent(id) {
 // ═══════════════════════════════════════════════════════
 //  LEARNING PATHS PAGE
 // ═══════════════════════════════════════════════════════
-async function renderLearning() {
-  const content = document.getElementById('main-content');
-  let paths = [];
-  try { paths = await API.get('/api/features/learning'); } catch {}
-  const currentUserId = State.user?._id || State.user?.id;
-  const diffColors = { beginner:'var(--accent)', intermediate:'var(--accent-warn)', advanced:'var(--accent-3)' };
-
-  content.innerHTML = `
-  <div class="page-header fade-in">
-    <div><div class="page-title">Learning Paths</div><div class="page-subtitle">Structured roadmaps to level up your skills</div></div>
-    ${State.user?.role === 'admin' ? `<button class="btn-primary" onclick="openNewLearningPath()">+ New Path</button>` : ''}
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px" class="fade-in">
-    ${paths.length === 0 ? `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🎓</div><div class="empty-title">No learning paths yet</div></div>` :
-      paths.map(p => {
-        const enrolled = p.enrolled?.some(e => (e._id||e).toString() === currentUserId);
-        return `
-        <div class="card" style="cursor:pointer" onclick="openLearningPath('${p._id}')">
-          ${p.image ? `<img src="${p.image}" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:12px">` : ''}
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-            <div style="font-weight:700;font-size:0.95rem;flex:1">${p.title}</div>
-            <span style="font-size:0.65rem;padding:2px 7px;border-radius:20px;background:rgba(0,0,0,0.2);color:${diffColors[p.difficulty]};border:1px solid ${diffColors[p.difficulty]};flex-shrink:0;margin-left:8px">${p.difficulty}</span>
-          </div>
-          <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:12px">${p.description?.slice(0,100)||''}...</div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-size:0.75rem;color:var(--text-muted)">📚 ${p.steps?.length||0} steps · 👥 ${p.enrolled?.length||0} enrolled</div>
-            <span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:var(--bg-elevated);color:var(--text-secondary)">${p.category}</span>
-          </div>
-          ${enrolled ? `<div style="margin-top:10px;font-size:0.75rem;color:var(--accent)">✓ Enrolled</div>` : ''}
-        </div>`;
-      }).join('')}
-  </div>`;
-}
-
 async function openLearningPath(id) {
   let path;
   try { path = await API.get(`/api/features/learning/${id}`); } catch { Toast.error('Failed to load'); return; }
@@ -430,47 +396,6 @@ async function deletePoll(id) {
 // ═══════════════════════════════════════════════════════
 //  BLOG PAGE
 // ═══════════════════════════════════════════════════════
-async function renderBlogs() {
-  const content = document.getElementById('main-content');
-  let blogs = [];
-  try { blogs = await API.get('/api/features/blogs'); } catch {}
-  const currentUserId = State.user?._id || State.user?.id;
-
-  content.innerHTML = `
-  <div class="page-header fade-in">
-    <div><div class="page-title">Blog & Posts</div><div class="page-subtitle">Technical articles from the team</div></div>
-    <button class="btn-primary" onclick="openNewBlog()">✍️ Write Post</button>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px" class="fade-in">
-    ${blogs.length === 0 ? `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📝</div><div class="empty-title">No posts yet. Be the first to write!</div></div>` :
-      blogs.map(b => {
-        const liked = b.likes?.some(l => (l._id||l).toString() === currentUserId);
-        return `
-        <div class="card" style="cursor:pointer;display:flex;flex-direction:column">
-          ${b.coverImage ? `<img src="${b.coverImage}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;margin-bottom:12px">` : ''}
-          <div style="font-weight:700;font-size:1rem;margin-bottom:6px" onclick="openBlogPost('${b._id}')">${b.title}</div>
-          <div style="font-size:0.78rem;color:var(--text-secondary);flex:1;margin-bottom:12px">${b.excerpt||''}</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            ${(b.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding-top:10px">
-            <div style="display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--text-secondary)">
-              <div class="user-avatar-sm" style="width:22px;height:22px;font-size:0.6rem">${b.author?.avatar?`<img src="${b.author.avatar}">`:b.author?.username?.[0]?.toUpperCase()||'?'}</div>
-              ${b.author?.username||'Unknown'}
-            </div>
-            <div style="display:flex;gap:10px;align-items:center">
-              <span style="font-size:0.72rem;color:var(--text-muted)">👁️ ${b.views||0}</span>
-              <button class="like-btn ${liked?'liked':''}" onclick="toggleBlogLike('${b._id}',this);event.stopPropagation()">
-                ♥ <span>${b.likes?.length||0}</span>
-              </button>
-              <button class="btn-secondary" style="font-size:0.72rem;padding:4px 8px" onclick="openBlogPost('${b._id}')">Read →</button>
-            </div>
-          </div>
-        </div>`;
-      }).join('')}
-  </div>`;
-}
-
 async function toggleBlogLike(id, btn) {
   try {
     const data = await API.put(`/api/features/blogs/${id}/like`);
@@ -504,23 +429,6 @@ async function addBlogComment(id) {
   if (!content) return;
   try { await API.post(`/api/features/blogs/${id}/comment`, { content }); openBlogPost(id); }
   catch (err) { Toast.error(err.message); }
-}
-
-async function deleteBlog(id) {
-  if (!confirm('Delete this post?')) return;
-  try { await API.delete(`/api/features/blogs/${id}`); Modal.close(); renderBlogs(); Toast.success('Post deleted'); }
-  catch (err) { Toast.error(err.message); }
-}
-
-function openNewBlog() {
-  Modal.open(`
-    <div class="form-group"><label>Title</label><input type="text" id="blog-title" placeholder="My awesome article"></div>
-    <div class="form-group"><label>Content</label><textarea id="blog-content" placeholder="Write your article here..." style="min-height:200px"></textarea></div>
-    <div class="form-group"><label>Tags (comma-separated)</label><input type="text" id="blog-tags" placeholder="javascript, tutorial, tips"></div>
-    <div class="form-group"><label>Cover Image URL (optional)</label><input type="text" id="blog-cover" placeholder="https://..."></div>
-    <button class="btn-primary btn-full" style="margin-top:12px" onclick="createBlog()">Publish Post</button>
-    <p style="font-size:0.72rem;color:var(--accent);text-align:center;margin-top:8px">+50 XP for publishing!</p>
-  `, 'Write a Blog Post');
 }
 
 async function createBlog() {

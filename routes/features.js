@@ -103,8 +103,6 @@ router.delete('/events/:id', requireAdmin, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════
-//  LEARNING PATHS
-// ═══════════════════════════════════════════════
 router.get('/learning', async (req, res) => {
   try {
     const paths = await LearningPath.find()
@@ -254,8 +252,6 @@ router.delete('/polls/:id', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Failed to delete' }); }
 });
 
-// ═══════════════════════════════════════════════
-//  BLOG / POSTS
 // ═══════════════════════════════════════════════
 router.get('/blogs', async (req, res) => {
   try {
