@@ -1,6 +1,6 @@
 {
   "name": "3abakra-platform",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "\u062c\u0631\u0648\u0628 \u0627\u0644\u0639\u0628\u0627\u0642\u0631\u0629 Community Platform",
   "main": "server.js",
   "scripts": {
@@ -23,6 +23,5 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
-  },
-  "_buildTime": "2026-03-11T17:35:29.214662"
+  }
 }
