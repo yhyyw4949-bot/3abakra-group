@@ -121,6 +121,7 @@ module.exports = function setupGameSockets(io, onlineUsers) {
         const otherSocket = findSocket(gameIo, other.socketId);
         if (otherSocket) {
           otherSocket.emit('opponent_guessed', {
+            guess: guessEntry.guess,
             bulls: guessEntry.bulls,
             cows: guessEntry.cows,
             turn: guessEntry.turn,
