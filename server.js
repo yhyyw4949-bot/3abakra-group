@@ -105,6 +105,12 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 const wrap = m => (s, next) => m(s.request, {}, next);
 io.use(wrap(sessionMiddleware));
 
+// Game namespace — separate socket namespace for the number game
+const gameNsp = io.of('/game');
+gameNsp.use(wrap(sessionMiddleware));
+const setupGameSockets = require('./game/gameSockets');
+setupGameSockets(io, onlineUsers);
+
 const onlineUsers = new Map();
 const User        = require('./models/User');
 const { Message } = require('./models/models');

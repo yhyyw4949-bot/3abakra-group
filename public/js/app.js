@@ -247,6 +247,7 @@ async function renderPage(page) {
       case 'teams':         await renderTeams(); break;
       case 'shop':          await renderShop(); break;
       case 'snippets':      await renderSnippets(); break;
+      case 'game':          await renderGame(); break;
       case 'videos':        await renderVideos(); break;
       case 'dms':           await renderDMs(); break;
       default: content.innerHTML = `<div class="empty-state"><div class="empty-icon">◻</div><div class="empty-title">Page not found</div></div>`;
