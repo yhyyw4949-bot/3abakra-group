@@ -14,7 +14,12 @@ let gameState  = {
 // ── Connect to game namespace ─────────────────────────────
 function initGameSocket() {
   if (gameSocket?.connected) return;
-  gameSocket = io('/game', { transports: ['websocket', 'polling'] });
+  try {
+    gameSocket = io('/game', { transports: ['websocket', 'polling'] });
+  } catch(e) {
+    console.error('Game socket error:', e);
+    return;
+  }
 
   gameSocket.on('connect', () => {
     console.log('Game socket connected');
@@ -45,11 +50,19 @@ function disconnectGameSocket() {
 
 // ── Main render ───────────────────────────────────────────
 async function renderGame() {
-  initGameSocket();
   gameState.phase = 'lobby';
+  gameState.roomId = null;
   const content = document.getElementById('main-content');
   content.innerHTML = buildLobbyHTML();
-  gameSocket.emit('get_rooms');
+  initGameSocket();
+  // emit only after socket is created (it connects async)
+  if (gameSocket) {
+    if (gameSocket.connected) {
+      gameSocket.emit('get_rooms');
+    } else {
+      gameSocket.once('connect', () => gameSocket.emit('get_rooms'));
+    }
+  }
 }
 
 function buildLobbyHTML() {
